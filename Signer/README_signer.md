@@ -28,6 +28,8 @@ curl -X POST https://x402.megalithlabs.ai/verify -H "Content-Type: application/j
 - ✅ **Standard ERC-20 Support**: Works with any ERC-20 token via MegalithStargate
 - ✅ **Multi-Network**: V1 supports BNB Chain Mainnet (56) and Testnet (97)
 - ✅ **Automatic Detection**: Auto-detects token type and configures appropriately
+- ✅ **API Contract Fetching**: Automatically uses latest Stargate contract version
+- ✅ **Token Approval Tool**: Easy approval for standard ERC-20 tokens
 - ✅ **Secure Signing**: All signing happens locally with your private key
 
 ---
@@ -51,30 +53,43 @@ nano signer.env
 
 **Required fields:**
 ```bash
-NETWORK=00			# e.g. 56=BNB Mainnet, 97=BNB testnet
+NETWORK=56			# 56=BNB Mainnet, 97=BNB testnet
 PAYER_KEY=0x...			# Your private key
 RECIPIENT=0x...		# Token recipient
 TOKEN=0x...			# Token to send
-AMOUNT=0.0			# Human-readable number of tokens to send
+AMOUNT=10.0			# Human-readable number of tokens to send
 
-STARGATE_CONTRACT_MAINNET=0x40200001004b5110333e4de8179426971efd034a
+# Stargate contract (leave empty to fetch from API automatically)
+STARGATE_CONTRACT=
 
-# Stargate CA not required for EIP-3009 transfers
-# Check latest version at x402.megalithlabs.ai
 # See signer.env for more guidance on all fields
 ```
 
-### 3. Create Payment Authorization
+### 3. Approve Token (Standard ERC-20 Only)
+
+**If using standard ERC-20 tokens (like USDT), approve first:**
 
 ```bash
-node signer.js
+cp approve.env.example approve.env
+# Edit approve.env with your details
+npm run approve
 ```
+
+**Skip this step** for EIP-3009 tokens (like USDC) - no approval needed!
+
+### 4. Create Payment Authorization
+
+```bash
+npm run sign
+```
+
+Or directly: `node signer.js`
 
 This creates:
 - `payload.json` - Ready to send to facilitator
 - `payloads/payload-TIMESTAMP.json` - Archived copy
 
-### 4. Test the Payment
+### 5. Test the Payment
 
 **Verify the payment (validates without executing):**
 
@@ -99,6 +114,32 @@ curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: appli
 ```bash
 curl -X POST https://x402.megalithlabs.ai/settle -H "Content-Type: application/json" -d @payload.json
 ```
+
+---
+
+## Token Approval (Standard ERC-20 Only)
+
+Before creating payments with standard ERC-20 tokens, you must approve the Stargate contract.
+
+### Quick Approval
+
+```bash
+cp approve.env.example approve.env
+# Edit approve.env with your details
+npm run approve
+```
+
+**What gets approved?**
+The MegalithStargate contract needs permission to transfer tokens from your wallet. This is a one-time approval per token (unless you revoke it or Stargate upgrades).
+
+**Features:**
+- ✅ Automatically fetches latest Stargate address from API
+- ✅ Shows current allowance before approving
+- ✅ Supports "unlimited" approval (recommended)
+- ✅ Interactive confirmation prompts
+- ✅ Color-coded terminal output
+
+**EIP-3009 tokens don't need approval** - they support direct authorization!
 
 ---
 
@@ -153,6 +194,33 @@ curl -X POST https://x402.megalithlabs.ai/settle -H "Content-Type: application/j
   "success": true,
   "txHash": "0x456pqr...",
   "message": "Payment settled successfully"
+}
+```
+
+#### Get Contract Addresses
+Get latest Stargate contract addresses for all supported networks.
+
+**Windows PowerShell:**
+```powershell
+curl.exe https://x402.megalithlabs.ai/contracts
+```
+
+**Windows CMD / Git Bash / Linux / macOS:**
+```bash
+curl https://x402.megalithlabs.ai/contracts
+```
+
+**Response:**
+```json
+{
+  "56": {
+    "stargate": "0x40200001004B5110333e4De8179426971Efd034A",
+    "version": "1.0.0"
+  },
+  "97": {
+    "stargate": "0x40200001004B5110333e4De8179426971Efd034A",
+    "version": "1.0.0"
+  }
 }
 ```
 
@@ -211,17 +279,26 @@ curl https://x402.megalithlabs.ai/health
 
 ## Configuration
 
-### Environment Variables
+### Signer Configuration (signer.env)
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `NETWORK` | Yes | Chain ID (56=BNBmain, 97=BNBtest) | `56` |
+| `NETWORK` | Yes | Chain ID (56=BNB mainnet, 97=BNB testnet) | `56` |
 | `PAYER_KEY` | Yes | Private key of payer | `0x1234...` |
 | `RECIPIENT` | Yes | Payment recipient address | `0x5678...` |
 | `TOKEN` | Yes | Token contract address | `0xabcd...` |
-| `AMOUNT` | Yes | Amount in human-readable units (see below) | `10.0` |
-| `STARGATE_CONTRACT_MAINNET` | ERC-20 only | Mainnet Stargate address | `0x4020...` |
-| `STARGATE_CONTRACT_TESTNET` | ERC-20 only | Testnet Stargate address | `0x4020...` |
+| `AMOUNT` | Yes | Amount in human-readable units | `10.0` |
+| `STARGATE_CONTRACT` | No | Manual Stargate override (leave empty for auto-fetch) | `` |
+
+### Approval Configuration (approve.env)
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `NETWORK` | Yes | Chain ID (56=BNB mainnet, 97=BNB testnet) | `56` |
+| `APPROVER_KEY` | Yes | Private key of approver | `0x1234...` |
+| `TOKEN` | Yes | Token contract address | `0x55d3...` |
+| `STARGATE_CONTRACT` | No | Manual Stargate override (leave empty for auto-fetch) | `` |
+| `AMOUNT` | No | Approval amount ("unlimited" or specific) | `unlimited` |
 
 ### AMOUNT Configuration - Human-Readable Format
 
@@ -248,24 +325,19 @@ AMOUNT=100     # Sends 100 USDC = 100000000 base units
 AMOUNT=0.5     # Sends 0.5 WBTC = 50000000 base units
 ```
 
-**⚠️ Always verify:** The script displays:
-```
-Amount: 10.0 USDT
-Token decimals: 18
-Base units: 10000000000000000000
-```
-
-**Double-check the base units before signing!** This ensures you're sending the correct amount.
+**⚠️ Always verify:** The script displays the base units before signing - double-check it!
 
 ### Network Configuration
 
 **BNB Chain Mainnet (56):**
 - RPC: `https://bsc-dataseed.binance.org/`
-- Stargate: `0x40200001004b5110333e4de8179426971efd034a`
+- Stargate: Auto-fetched from API
 
 **BNB Chain Testnet (97):**
 - RPC: `https://data-seed-prebsc-1-s1.binance.org:8545/`
-- Stargate: `0x40200001004b5110333e4de8179426971efd034a`
+- Stargate: Auto-fetched from API
+
+**Current Stargate:** `0x40200001004B5110333e4De8179426971Efd034A` (v1.0.0)
 
 ---
 
@@ -278,27 +350,95 @@ Base units: 10000000000000000000
 - ✅ `STARGATE_CONTRACT` not needed
 
 ### Standard ERC-20 Tokens (e.g., USDT)
-- ⚠️ Requires approval first
-- ⚠️ Must configure `STARGATE_CONTRACT`
-- Uses `permit` or fallback approval mechanism
-- MegalithStargate executes the transfer
+- ⚠️ Requires approval first (use `npm run approve`)
+- ⚠️ Uses MegalithStargate contract
+- ✅ Approval is one-time per token
+- ✅ Stargate address auto-fetched from API
 
-The Stargate contract is needed because standard ERC-20 tokens don't support the `transferWithAuthorization` function that EIP-3009 tokens have. Stargate is Megalith's solution, bringing x402 payments to all ERC-20 tokens.
+The Stargate contract is needed because standard ERC-20 tokens don't support the `transferWithAuthorization` function that EIP-3009 tokens have. MegalithStargate brings x402 payments to all ERC-20 tokens.
 
 **To approve a standard ERC-20 token:**
 ```bash
-# Manually approve via block explorer
-# Approval script coming soon
+npm run approve
 ```
 
+Or manually via block explorer - see [Troubleshooting](#troubleshooting) below.
+
+---
+
+## Token Approval Details
+
+### approve.js Configuration
+
+**approve.env variables:**
+```bash
+NETWORK=56                  # 56=BNB mainnet, 97=BNB testnet
+APPROVER_KEY=0x...          # Wallet that holds the tokens
+TOKEN=0x55d3...             # Token contract address
+STARGATE_CONTRACT=          # Leave empty (auto-fetched)
+AMOUNT=unlimited            # "unlimited" or specific amount
+```
+
+### Common Token Addresses
+
+**BNB Chain Mainnet:**
+| Token | Address |
+|-------|---------|
+| USDT | `0x55d398326f99059fF775485246999027B3197955` |
+| USDC | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` |
+| BUSD | `0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56` |
+
+### Approval Amount Options
+
+**Unlimited (Recommended):**
+```bash
+AMOUNT=unlimited
+```
+- ✅ One-time approval for all future payments
+- ✅ Saves gas on subsequent transactions
+- ⚠️ Gives Stargate permission to spend any amount
+- ⚠️ Only approve trusted contracts
+
+**Specific Amount:**
+```bash
+AMOUNT=1000.0
+```
+- ✅ Limits approval to exact amount
+- ❌ Need new approval when depleted
+- ❌ More gas fees over time
+
+### Approval Workflow
+
+```bash
+# 1. Configure
+cp approve.env.example approve.env
+nano approve.env
+
+# 2. Run approval
+npm run approve
+
+# 3. Confirm transaction
+# (Interactive prompt with warnings)
+
+# 4. Wait for confirmation
+# ✓ Approval successful!
+
+# 5. Now you can create payments
+npm run sign
+```
+
+---
 
 ## File Structure
 
 ```
 signer/
-├── signer.js                 # Main signing script
-├── signer.env                # Your configuration (DO NOT COMMIT)
-├── signer.env.example        # Template configuration
+├── signer.js                 # Payment signing script
+├── signer.env                # Your signer config (DO NOT COMMIT)
+├── signer.env.example        # Signer config template
+├── approve.js                # Token approval script
+├── approve.env               # Your approval config (DO NOT COMMIT)
+├── approve.env.example       # Approval config template
 ├── package.json              # Dependencies
 ├── payload.json              # Latest signed payload (overwrites)
 ├── payloads/                 # Archived payloads
@@ -311,6 +451,7 @@ signer/
 **`.gitignore` should include:**
 ```
 signer.env
+approve.env
 node_modules/
 payload.json
 payloads/
@@ -321,7 +462,7 @@ payloads/
 ## Security Best Practices
 
 ### 🔐 Private Key Safety
-- **NEVER** commit `signer.env` to git
+- **NEVER** commit `signer.env` or `approve.env` to git
 - **NEVER** share your private key
 - Use environment variables or secure key management
 - Consider using a hardware wallet for production
@@ -333,8 +474,8 @@ payloads/
 
 ### 💰 Amount Limits
 - Double-check the `AMOUNT` before signing
-- Amounts are in token's base units (usually 18 decimals)
 - Script shows human-readable amount for confirmation
+- Always verify base units match your intention
 
 ### 🌐 Network Selection
 - **Always verify** you're on the correct network
@@ -342,32 +483,46 @@ payloads/
 - Testnet (97) = test tokens only
 - Script displays current network clearly
 
+### ⚠️ Unlimited Approvals
+- Only approve contracts you trust
+- MegalithStargate is audited and secure
+- Can revoke approvals anytime via block explorer
+- Consider specific amounts for extra caution
+
 ---
 
 ## Troubleshooting
 
 ### "Cannot find module 'dotenv'"
 ```bash
-npm install dotenv ethers
+npm install
 ```
 
-### "STARGATE_CONTRACT not configured"
-You're using a standard ERC-20 token. Add to `signer.env`:
+### "Could not fetch Stargate contract from API"
+If the API is unavailable, you can manually set the Stargate address:
+
+**In signer.env or approve.env:**
 ```bash
-STARGATE_CONTRACT_MAINNET=0x40200001004b5110333e4de8179426971efd034a
+STARGATE_CONTRACT=0x40200001004B5110333e4De8179426971Efd034A
 ```
 
 ### "Insufficient allowance" or Settlement Reverts
-For standard ERC-20 tokens, token approvals are needed:
+For standard ERC-20 tokens, run the approval tool:
 
-**1. Approve the Stargate contract (as payer):**
-Go to the token contract on the relevant block explorer and call `approve`:
+```bash
+npm run approve
 ```
-spender: 0x40200001004b5110333e4de8179426971efd034a  (Stargate)
-amount: 1000000000000000000000  (large number)
-```
-Approving a large number of tokens ensures repeated approvals won't be necessary. Approval is one-time; not required by subsequent transactions until your approved amount is consumed. NB if the MegalithStargate contract has been upgraded since you last used it, new approvals will be required for the new contract.
 
+**Or manually approve via block explorer:**
+
+1. Go to token contract on BscScan
+2. Connect wallet (Write Contract tab)
+3. Call `approve` function:
+   ```
+   spender: 0x40200001004B5110333e4De8179426971Efd034A
+   amount: 115792089237316195423570985008687907853269984665640564039457584007913129639935
+   ```
+   (This is max uint256 for unlimited approval)
 
 ### "Payment verification failed"
 
@@ -383,9 +538,10 @@ Approving a large number of tokens ensures repeated approvals won't be necessary
 
 ### Transaction Reverts with "status: 0"
 This usually means:
-1. **Insufficient allowance** - Payer must approve Stargate contract (see above)
-2. **Nonce already used** - Create a new payment with `node signer.js`
+1. **Insufficient allowance** - Run `npm run approve`
+2. **Nonce already used** - Create new payment with `npm run sign`
 3. **Insufficient balance** - Payer doesn't have enough tokens
+4. **Insufficient gas** - Payer needs more BNB (for approve.js only)
 
 ### Windows PowerShell curl Issues
 Use `curl.exe` with `--%` flag:
@@ -393,25 +549,31 @@ Use `curl.exe` with `--%` flag:
 curl.exe -X POST https://x402.megalithlabs.ai/verify --% -H "Content-Type: application/json" -d @payload.json
 ```
 
+### "APPROVER_KEY" vs "PAYER_KEY" Confusion
+- **APPROVER_KEY** (approve.env) = Wallet that holds the tokens for approval
+- **PAYER_KEY** (signer.env) = Wallet that signs the payment authorization
+
+Usually these are the same wallet, but they can be different.
+
 ### Payment Archives
 Old payloads in `payloads/` folder are kept for audit purposes. They expire after 1 hour and can be safely deleted:
 ```bash
-# Clean up old payloads
 rm -rf payloads/
 ```
 
 ---
 
+## NPM Scripts
 
-### Debug Mode
-
-Enable verbose logging:
 ```bash
-# Add to signer.env
-DEBUG=true
+npm run sign      # Create payment authorization (node signer.js)
+npm run approve   # Approve tokens for Stargate (node approve.js)
+```
 
-# Run with logging
-node signer.js 2>&1 | tee signer.log
+Or run directly:
+```bash
+node signer.js
+node approve.js
 ```
 
 ---
@@ -420,7 +582,6 @@ node signer.js 2>&1 | tee signer.log
 
 - 🌐 Website: https://megalithlabs.ai
 - 📧 Email: support@megalithlabs.ai
-- 📚 Docs: https://docs.megalithlabs.ai
 - 🐛 Issues: https://github.com/megalithlabs/x402/issues
 
 ---
@@ -432,6 +593,12 @@ MIT License - see LICENSE file for details
 ---
 
 ## Changelog
+
+### v1.1.0 (Upcoming)
+- Added token approval tool (approve.js)
+- API contract fetching for latest Stargate addresses
+- Improved configuration with auto-detection
+- Enhanced error messages and troubleshooting
 
 ### v1.0.0
 - Initial release
