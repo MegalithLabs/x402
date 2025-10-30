@@ -1,4 +1,3 @@
-<!-- test -->
 # Megalith x402
 
 Payment authorization system for EVM-compatible blockchains supporting EIP-3009 and ERC-20 tokens.
