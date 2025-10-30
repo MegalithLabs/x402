@@ -8,9 +8,41 @@ console.log("=== Megalith x402 Signer & Payload Creator ===\n");
 require('dotenv').config({ path: 'signer.env' });
 const { ethers } = require('ethers');
 
+// Facilitator API
+const FACILITATOR_API = process.env.FACILITATOR_API || 'https://x402.megalithlabs.ai';
+
 // Custom JSON replacer to handle BigInt serialization
 const replacer = (key, value) =>
   typeof value === 'bigint' ? value.toString() : value;
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+// Fetch latest Stargate contract from API
+async function fetchStargateContract(network) {
+  try {
+    console.log("→ Fetching latest Stargate contract from API...");
+    const response = await fetch(`${FACILITATOR_API}/contracts`);
+    
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    
+    const contracts = await response.json();
+    
+    if (!contracts[network]) {
+      throw new Error(`Network ${network} not supported`);
+    }
+    
+    const { stargate, version } = contracts[network];
+    console.log(`✓ Stargate: ${stargate} (v${version})`);
+    return stargate;
+  } catch (error) {
+    console.log(`⚠️  Could not fetch from API: ${error.message}`);
+    return null;
+  }
+}
 
 (async () => {
   // ============================================
@@ -22,33 +54,35 @@ const replacer = (key, value) =>
   const RECIPIENT = process.env.RECIPIENT;
   const TOKEN = process.env.TOKEN;
   const AMOUNT = process.env.AMOUNT;
+  let STARGATE_CONTRACT = process.env.STARGATE_CONTRACT;
   
   // Network-specific configuration
   const NETWORK_CONFIG = {
     56: {
       name: 'BNB Chain Mainnet',
-      rpcUrl: 'https://bsc-dataseed.binance.org/',
-      stargateContract: process.env.STARGATE_CONTRACT_MAINNET
+      rpcUrl: 'https://bsc-dataseed.binance.org/'
     },
     97: {
       name: 'BNB Chain Testnet',
-      rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/',
-      stargateContract: process.env.STARGATE_CONTRACT_TESTNET
+      rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/'
     }
   };
 
+  // ============================================
+  // VALIDATE CONFIGURATION
+  // ============================================
+
   // Validate network
   if (!NETWORK_CONFIG[NETWORK]) {
-    console.error("❌ Invalid NETWORK in .env file");
+    console.error("❌ Invalid NETWORK in signer.env");
     console.error("Supported networks: 56 (BNB Mainnet), 97 (BNB Testnet)");
     process.exit(1);
   }
 
   const networkConfig = NETWORK_CONFIG[NETWORK];
-  const STARGATE_CONTRACT = networkConfig.stargateContract;
 
   if (!PAYER_KEY || !RECIPIENT || !TOKEN || !AMOUNT) {
-    console.error("❌ Missing configuration in .env file");
+    console.error("❌ Missing configuration in signer.env");
     console.error("Required: NETWORK, PAYER_KEY, RECIPIENT, TOKEN, AMOUNT");
     process.exit(1);
   }
@@ -74,6 +108,7 @@ const replacer = (key, value) =>
     'function name() view returns (string)',
     'function version() view returns (string)',
     'function symbol() view returns (string)',
+    'function decimals() view returns (uint8)',
     'function balanceOf(address) view returns (uint256)',
     'function authorizationState(address, bytes32) view returns (bool)', // EIP-3009 only
     'function allowance(address owner, address spender) view returns (uint256)' // Check approval for ERC-20
@@ -85,7 +120,7 @@ const replacer = (key, value) =>
   // FETCH TOKEN DETAILS
   // ============================================
   
-  let tokenName, tokenVersion, tokenSymbol, balance;
+  let tokenName, tokenVersion, tokenSymbol, tokenDecimals, balance;
   try {
     tokenName = await token.name();
     console.log("Token name:", tokenName);
@@ -110,8 +145,16 @@ const replacer = (key, value) =>
   }
 
   try {
+    tokenDecimals = await token.decimals();
+    console.log("Token decimals:", tokenDecimals);
+  } catch (e) {
+    console.log("⚠️  Could not fetch token decimals, defaulting to 18");
+    tokenDecimals = 18;
+  }
+
+  try {
     balance = await token.balanceOf(wallet.address);
-    console.log("Payer balance:", ethers.formatUnits(balance, 18), tokenSymbol || "tokens");
+    console.log("Payer balance:", ethers.formatUnits(balance, tokenDecimals), tokenSymbol || "tokens");
   } catch (e) {
     console.log("⚠️  Could not fetch balance");
   }
@@ -135,18 +178,59 @@ const replacer = (key, value) =>
   }
 
   // ============================================
+  // GET STARGATE CONTRACT (if needed for ERC-20)
+  // ============================================
+
+  if (!isEIP3009) {
+    // Only fetch Stargate if we need it (ERC-20 token)
+    if (!STARGATE_CONTRACT || STARGATE_CONTRACT === '') {
+      console.log("\n→ Standard ERC-20 detected, fetching Stargate contract...");
+      STARGATE_CONTRACT = await fetchStargateContract(NETWORK);
+      
+      if (!STARGATE_CONTRACT) {
+        console.error("\n❌ ERROR: Could not get Stargate contract address");
+        console.error(`Network: ${networkConfig.name} (Chain ID: ${NETWORK})`);
+        console.error("\nFor standard ERC-20 tokens, you must either:");
+        console.error("  1. Let the script fetch from API (leave STARGATE_CONTRACT empty)");
+        console.error("  2. Set STARGATE_CONTRACT manually in signer.env");
+        console.error("\nExample:");
+        console.error(`  STARGATE_CONTRACT=0x40200001004B5110333e4De8179426971Efd034A`);
+        process.exit(1);
+      }
+    } else {
+      console.log("\n→ Using Stargate from signer.env:", STARGATE_CONTRACT);
+      
+      // Verify with API if possible
+      const apiStargate = await fetchStargateContract(NETWORK);
+      if (apiStargate && apiStargate.toLowerCase() !== STARGATE_CONTRACT.toLowerCase()) {
+        console.log(`⚠️  Warning: Your configured Stargate (${STARGATE_CONTRACT}) differs from API (${apiStargate})`);
+        console.log("Continuing with your configured address...");
+      }
+    }
+
+    // Normalize to checksum format
+    try {
+      STARGATE_CONTRACT = ethers.getAddress(STARGATE_CONTRACT);
+    } catch (error) {
+      console.error("❌ Invalid Stargate contract address:", STARGATE_CONTRACT);
+      process.exit(1);
+    }
+  }
+
+  // ============================================
   // CREATE AUTHORIZATION BASED ON TOKEN TYPE
   // ============================================
 
   const now = Math.floor(Date.now() / 1000);
   const validAfter = now - 60;  // 60 seconds in the past to account for clock skew
   const validBefore = now + 3600;  // Valid for 1 hour
-  const value = ethers.parseUnits(AMOUNT, 18);
+  const value = ethers.parseUnits(AMOUNT, tokenDecimals);
 
   console.log("\n=== Authorization Details ===");
   console.log("Valid after:", new Date(validAfter * 1000).toISOString());
   console.log("Valid before:", new Date(validBefore * 1000).toISOString());
-  console.log("Value:", ethers.formatUnits(value, 18), tokenSymbol || "tokens");
+  console.log("Value:", ethers.formatUnits(value, tokenDecimals), tokenSymbol || "tokens");
+  console.log("Base units:", value.toString());
 
   let payload, sig, message, domain, types, nonce;
 
@@ -225,29 +309,16 @@ const replacer = (key, value) =>
     // ============================================
     
     console.log("\n=== Creating ERC-20 Authorization (MegalithStargate) ===");
-
-    // Check if STARGATE_CONTRACT is set
-    if (!STARGATE_CONTRACT || STARGATE_CONTRACT === '0x0000000000000000000000000000000000000000') {
-      console.error("\n❌ ERROR: STARGATE_CONTRACT not configured for this network");
-      console.error(`Network: ${networkConfig.name} (Chain ID: ${NETWORK})`);
-      console.error("\nFor standard ERC-20 tokens, you must:");
-      console.error("  1. Deploy MegalithStargate contract on this network");
-      console.error(`  2. Set STARGATE_CONTRACT_${NETWORK === 56 ? 'MAINNET' : 'TESTNET'} in .env`);
-      console.error("\nExample:");
-      console.error(`  STARGATE_CONTRACT_${NETWORK === 56 ? 'MAINNET' : 'TESTNET'}=0x40200001004b5110333e4de8179426971efd034a`);
-      process.exit(1);
-    }
-
     console.log("Stargate contract:", STARGATE_CONTRACT);
 
-    // Check if user has approved the facilitator contract
+    // Check if user has approved the Stargate contract
     try {
       const allowance = await token.allowance(wallet.address, STARGATE_CONTRACT);
       if (allowance < value) {
         console.log("\n⚠️  WARNING: Insufficient approval!");
-        console.log("Current allowance:", ethers.formatUnits(allowance, 18), tokenSymbol);
-        console.log("Required amount:", ethers.formatUnits(value, 18), tokenSymbol);
-        console.log("\n👉 You must first run: node approve-token.js");
+        console.log("Current allowance:", ethers.formatUnits(allowance, tokenDecimals), tokenSymbol);
+        console.log("Required amount:", ethers.formatUnits(value, tokenDecimals), tokenSymbol);
+        console.log("\n👉 You must first run: npm run approve");
         console.log("This will approve the MegalithStargate contract to spend your tokens.");
         console.log("\nContinuing anyway - settlement will fail if approval is not done...\n");
       } else {
@@ -257,15 +328,15 @@ const replacer = (key, value) =>
       console.log("⚠️  Could not check approval status");
     }
 
-    // Get current nonce from facilitator contract
-    const facilitatorABI = [
+    // Get current nonce from Stargate contract
+    const stargateABI = [
       'function getNonce(address user, address token) view returns (uint256)'
     ];
-    const facilitatorContract = new ethers.Contract(STARGATE_CONTRACT, facilitatorABI, provider);
+    const stargateContract = new ethers.Contract(STARGATE_CONTRACT, stargateABI, provider);
     
     let currentNonce;
     try {
-      currentNonce = await facilitatorContract.getNonce(wallet.address, TOKEN);
+      currentNonce = await stargateContract.getNonce(wallet.address, TOKEN);
       console.log("Current nonce (uint256):", currentNonce.toString());
     } catch (e) {
       console.error("❌ Failed to fetch nonce from Stargate contract");
@@ -377,7 +448,7 @@ const replacer = (key, value) =>
     console.log("\n📋 STANDARD ERC-20 TOKEN - Use /settle endpoint:");
     console.log("  (The facilitator auto-detects token type)");
     console.log(`  curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: application/json" -d @payload.json`);
-    console.log("\n⚠️  IMPORTANT: Make sure you've run approve-token.js first!");
+    console.log("\n⚠️  IMPORTANT: Make sure you've run: npm run approve");
   }
 
   console.log("\n💻 Local testing:");
@@ -390,7 +461,7 @@ const replacer = (key, value) =>
   console.log("Type:", isEIP3009 ? "EIP-3009 (direct)" : "ERC-20 (via MegalithStargate)");
   console.log("From:", wallet.address);
   console.log("To:", RECIPIENT);
-  console.log("Amount:", ethers.formatUnits(value, 18), tokenSymbol || "tokens");
+  console.log("Amount:", ethers.formatUnits(value, tokenDecimals), tokenSymbol || "tokens");
   console.log("The facilitator will pay the gas fees.");
 
 })().catch(error => {
