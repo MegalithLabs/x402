@@ -278,11 +278,12 @@ async function fetchStargateContract(network) {
     const { v, r, s } = ethers.Signature.from(sig);
 
     console.log("✅ Signature created successfully");
+    console.log("→ Using scheme: eip3009 (native EIP-3009 authorization)");
 
     // x402-compliant payment payload for X-PAYMENT header
     const x402Payment = {
       x402Version: 1,
-      scheme: "exact",
+      scheme: "eip3009",  // EIP-3009 tokens use native transferWithAuthorization
       network: NETWORK.toString(),
       payload: {
         authorization: {
@@ -301,7 +302,7 @@ async function fetchStargateContract(network) {
 
     // x402-compliant payment requirements
     const x402Requirements = {
-      scheme: "exact",
+      scheme: "eip3009",  // EIP-3009 tokens use native transferWithAuthorization
       network: NETWORK.toString(),
       maxAmountRequired: message.value.toString(),
       resource: "/api/settlement",
@@ -402,11 +403,12 @@ async function fetchStargateContract(network) {
     const { v, r, s } = ethers.Signature.from(sig);
 
     console.log("✅ Signature created successfully");
+    console.log("→ Using scheme: exact (Stargate proxy for standard ERC-20)");
 
     // x402-compliant payment payload for X-PAYMENT header
     const x402Payment = {
       x402Version: 1,
-      scheme: "exact",
+      scheme: "exact",  // Standard ERC-20 tokens use Stargate proxy
       network: NETWORK.toString(),
       payload: {
         authorization: {
@@ -425,7 +427,7 @@ async function fetchStargateContract(network) {
 
     // x402-compliant payment requirements
     const x402Requirements = {
-      scheme: "exact",
+      scheme: "exact",  // Standard ERC-20 tokens use Stargate proxy
       network: NETWORK.toString(),
       maxAmountRequired: message.value.toString(),
       resource: "/api/settlement",
