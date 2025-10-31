@@ -1,90 +1,77 @@
 # Megalith x402
 
-Payment authorization system for EVM-compatible blockchains supporting EIP-3009 and ERC-20 tokens.
+**x402-compliant payment system** for EVM-compatible blockchains supporting both EIP-3009 and standard ERC-20 tokens.
 
-## What's This?
+**Part of the x402 protocol**: An open standard for internet-native payments using HTTP 402 status codes.
 
-x402 enables signed payment authorizations that can be executed by a facilitator service. Users sign payments locally, and the facilitator submits them on-chain.
+Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.ai)
 
-**Perfect for:**
-- Gasless payments (facilitator pays gas)
-- Delegated transfers
-- Multi-chain payment systems and apps
+---
+
+## What is x402?
+
+x402 is an open payment protocol that enables AI agents and web services to autonomously pay for API access, data, and digital services using stablecoins like USDC. It leverages the HTTP 402 "Payment Required" status code to enable:
+
+- 🤖 **AI-native payments** - Agents pay for APIs autonomously
+- 💰 **Micropayments** - Transactions as low as $0.001
+- ⚡ **Instant settlement** - ~200ms on Layer 2
+- 🔓 **No accounts required** - Pay-per-use without registration
+- 🌐 **Chain agnostic** - Works on any blockchain
+
+---
 
 ## Repository Contents
 
-- **[signer/](signer/)** - Client tool to create signed payments → **Start here!**
-- **[contracts/](contracts/)** - Megalith Stargate smart contract source
-- **[docs/](docs/)** - API reference and guides
+- **[Signer/](Signer/)** - Client tool to create x402-compliant payment authorizations → **Start here!**
+- **[Contracts/](Contracts/)** - MegalithStargate smart contract source
+
+---
 
 ## Quick Start
 
-1. Install the signer:
-   ```bash
-   cd signer
-   npm install
-   ```
+```bash
+cd Signer
+npm install
+cp signer.env.example signer.env
+# Edit signer.env with your details
+node signer.js
+```
 
-2. Configure and run:
-   ```bash
-   cp signer.env.example signer.env
-   # Edit signer.env with your details
-   node signer.js
-   ```
+**Full documentation:** [Signer/README.md](Signer/README.md)
 
-3. Send payment to facilitator:
-   
-   **Windows PowerShell:**
-   ```powershell
-   curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: application/json" -d @payload.json
-   ```
-   
-   **Linux / macOS / Git Bash:**
-   ```bash
-   curl -X POST https://x402.megalithlabs.ai/settle \
-     -H "Content-Type: application/json" \
-     -d @payload.json
-   ```
+---
 
-**Full documentation:** [signer/README.md](signer/README.md)
+## MegalithStargate Smart Contract
 
-## API
+Enables x402 payments with standard ERC-20 tokens that lack native EIP-3009 support.
+
+**Current Deployments (v1.0.0):**
+
+| Network | Chain ID | Contract Address |
+|---------|----------|------------------|
+| **BNB Chain Mainnet** | 56 | `0x40200001004b5110333e4de8179426971efd034a` |
+| **BNB Chain Testnet** | 97 | `0x40200001004b5110333e4de8179426971efd034a` |
+
+**Source:** [Contracts/Stargate.sol](Contracts/Stargate.sol)
+
+---
+
+## x402 Facilitator API
 
 **Production:** https://x402.megalithlabs.ai
 
-**Endpoints:**
-- `POST /verify` - Validate payment authorization
-- `POST /settle` - Execute payment on-chain
-- `GET /supported` - List supported networks
-- `GET /health` - Service health check
+### Standard x402 Endpoints
 
-See [docs/API.md](docs/API.md) for details.
+- **`POST /verify`** - Validate payment authorization signature
+- **`POST /settle`** - Execute payment on-chain and settle
+- **`GET /supported`** - List supported payment schemes and networks
 
-## Stargate smart contract
-Enables x402 payments with standard ERC-20 tokens lacking EIP-3009 compatibility.
+### Additional Endpoints
 
-**Current Deployments (v1):**
+- **`GET /contracts`** - Get current Stargate contract addresses
+- **`GET /health`** - Service health check
 
-**BNB Chain Mainnet:**  
-`0x40200001004b5110333e4de8179426971efd034a`
-
-**BNB Chain Testnet:**  
-`0x40200001004b5110333e4de8179426971efd034a`
-
-The MegalithStargate contract handles standard ERC-20 token transfers with facilitator authorization.
-
-## Architecture
-
-```
-┌─────────┐         ┌──────────────┐         ┌────────────┐
-│  User   │ signs   │ Facilitator  │ submits │ Blockchain │
-│ (signer)│───────▶│   (Megalith)  │───────▶│  (BNB)     │
-└─────────┘         └──────────────┘         └────────────┘
-```
-
-1. **User** creates signed payment authorization locally (no gas needed)
-2. **Facilitator** validates and executes the payment on-chain (pays gas)
-3. **Blockchain** transfers tokens according to the authorization
+---
 
 ## Supported Networks
 
@@ -92,18 +79,36 @@ The MegalithStargate contract handles standard ERC-20 token transfers with facil
 - ✅ **BNB Chain Mainnet** (Chain ID: 56)
 - ✅ **BNB Chain Testnet** (Chain ID: 97)
 
-Additional EVM chains coming soon. The system is designed to work with any EVM-compatible blockchain.
+---
 
 ## Token Support
 
-- ✅ **EIP-3009 tokens** (e.g., USDC) - Direct authorization
-- ✅ **Standard ERC-20** (e.g., USDT) - Via MegalithStargate contract
+### EIP-3009 Tokens (Native Support)
+- ✅ **USDC** - Direct authorization, no approval needed
+- ✅ **EURC** - Direct authorization, no approval needed
+
+### Standard ERC-20 Tokens (via Stargate)
+- ✅ **USDT** - Requires one-time approval
+- ✅ **DAI** - Requires one-time approval
+- ✅ **BUSD** - Requires one-time approval
+- ✅ **Any ERC-20** - Just approve once, then sign payments
+
+**Note:** Standard ERC-20 tokens require running `npm run approve` once before creating payment authorizations.
+
+---
+
+## Support
+
+- 🌐 Website: https://megalithlabs.ai
+- 🌐 x402 Protocol: https://x402.org
+- 📧 Email: support@megalithlabs.ai
+- 🐛 Issues: https://github.com/megalithlabs/x402/issues
+- 📚 Docs: [Signer/README.md](Signer/README.md)
+
+---
 
 ## License
 
 MIT License - see [LICENSE](LICENSE)
 
 ---
-
-**Website:** https://megalithlabs.ai  
-**Support:** support@megalithlabs.ai

@@ -279,28 +279,48 @@ async function fetchStargateContract(network) {
 
     console.log("✅ Signature created successfully");
 
-    payload = {
-      paymentPayload: {
-        payload: {
-          authorization: {
-            from: message.from,
-            to: message.to,
-            value: message.value.toString(),
-            validAfter: message.validAfter,
-            validBefore: message.validBefore,
-            nonce: message.nonce,
-            v: Number(v),
-            r: r.toString(),
-            s: s.toString()
-          }
+    // x402-compliant payment payload for X-PAYMENT header
+    const x402Payment = {
+      x402Version: 1,
+      scheme: "exact",
+      network: NETWORK.toString(),
+      payload: {
+        authorization: {
+          from: message.from,
+          to: message.to,
+          value: message.value.toString(),
+          validAfter: message.validAfter,
+          validBefore: message.validBefore,
+          nonce: message.nonce,
+          v: Number(v),
+          r: r.toString(),
+          s: s.toString()
         }
-      },
-      paymentRequirements: {
-        network: NETWORK,
-        asset: TOKEN,
-        recipient: RECIPIENT,
-        amount: message.value.toString()
       }
+    };
+
+    // x402-compliant payment requirements
+    const x402Requirements = {
+      scheme: "exact",
+      network: NETWORK.toString(),
+      maxAmountRequired: message.value.toString(),
+      resource: "/api/settlement",
+      description: `Payment of ${ethers.formatUnits(value, tokenDecimals)} ${tokenSymbol || 'tokens'}`,
+      mimeType: "application/json",
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 30,
+      asset: TOKEN,
+      extra: {
+        name: tokenName,
+        version: tokenVersion
+      }
+    };
+
+    // Combined payload for facilitator POST (backwards compatible)
+    payload = {
+      x402Version: 1,
+      paymentHeader: Buffer.from(JSON.stringify(x402Payment, replacer)).toString('base64'),
+      paymentRequirements: x402Requirements
     };
 
   } else {
@@ -383,28 +403,47 @@ async function fetchStargateContract(network) {
 
     console.log("✅ Signature created successfully");
 
-    payload = {
-      paymentPayload: {
-        payload: {
-          authorization: {
-            from: message.from,
-            to: message.to,
-            value: message.value.toString(),
-            validAfter: message.validAfter,
-            validBefore: message.validBefore,
-            nonce: nonce.toString(), // uint256 as string
-            v: Number(v),
-            r: r.toString(),
-            s: s.toString()
-          }
+    // x402-compliant payment payload for X-PAYMENT header
+    const x402Payment = {
+      x402Version: 1,
+      scheme: "exact",
+      network: NETWORK.toString(),
+      payload: {
+        authorization: {
+          from: message.from,
+          to: message.to,
+          value: message.value.toString(),
+          validAfter: message.validAfter,
+          validBefore: message.validBefore,
+          nonce: nonce.toString(),
+          v: Number(v),
+          r: r.toString(),
+          s: s.toString()
         }
-      },
-      paymentRequirements: {
-        network: NETWORK,
-        asset: TOKEN,
-        recipient: RECIPIENT,
-        amount: message.value.toString()
       }
+    };
+
+    // x402-compliant payment requirements
+    const x402Requirements = {
+      scheme: "exact",
+      network: NETWORK.toString(),
+      maxAmountRequired: message.value.toString(),
+      resource: "/api/settlement",
+      description: `Payment of ${ethers.formatUnits(value, tokenDecimals)} ${tokenSymbol || 'tokens'}`,
+      mimeType: "application/json",
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 30,
+      asset: TOKEN,
+      extra: {
+        stargateContract: STARGATE_CONTRACT
+      }
+    };
+
+    // Combined payload for facilitator POST (backwards compatible)
+    payload = {
+      x402Version: 1,
+      paymentHeader: Buffer.from(JSON.stringify(x402Payment, replacer)).toString('base64'),
+      paymentRequirements: x402Requirements
     };
   }
 
@@ -412,9 +451,9 @@ async function fetchStargateContract(network) {
   // SAVE PAYLOAD
   // ============================================
 
-  console.log("\n=== PAYMENT PAYLOAD ===");
+  console.log("\n=== X402 PAYMENT PAYLOAD ===");
   console.log(JSON.stringify(payload, replacer, 2));
-  console.log("=======================\n");
+  console.log("============================\n");
 
   const fs = require('fs');
   
@@ -427,6 +466,17 @@ async function fetchStargateContract(network) {
   const mainFile = 'payload.json';
   fs.writeFileSync(mainFile, JSON.stringify(payload, replacer, 2));
   console.log(`✅ Saved to: ${mainFile}`);
+
+  // Save just the payment header for X-PAYMENT usage
+  const headerFile = 'payment-header.txt';
+  fs.writeFileSync(headerFile, payload.paymentHeader);
+  console.log(`✅ Saved X-PAYMENT header to: ${headerFile}`);
+
+  // Save the raw x402 payment object (before base64 encoding)
+  const x402File = 'x402-payment.json';
+  const decodedPayment = JSON.parse(Buffer.from(payload.paymentHeader, 'base64').toString());
+  fs.writeFileSync(x402File, JSON.stringify(decodedPayment, replacer, 2));
+  console.log(`✅ Saved x402 payment object to: ${x402File}`);
   
   // Save timestamped backup in payloads folder
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // Remove milliseconds for cleaner name
@@ -441,28 +491,42 @@ async function fetchStargateContract(network) {
   console.log("\n=== USAGE ===");
   console.log(`Network: ${networkConfig.name} (Chain ID: ${NETWORK})`);
   
-  if (isEIP3009) {
-    console.log("\n📋 EIP-3009 TOKEN - Use /settle endpoint:");
-    console.log(`  curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: application/json" -d @payload.json`);
-  } else {
-    console.log("\n📋 STANDARD ERC-20 TOKEN - Use /settle endpoint:");
-    console.log("  (The facilitator auto-detects token type)");
-    console.log(`  curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: application/json" -d @payload.json`);
-    console.log("\n⚠️  IMPORTANT: Make sure you've run: npm run approve");
+  console.log("\n📤 Option 1: Send to Resource Server (standard x402)");
+  console.log("Use the X-PAYMENT header with any x402-compatible API:");
+  console.log(`  curl -H "X-PAYMENT: $(cat payment-header.txt)" \\`);
+  console.log(`       https://api.example.com/paid-endpoint`);
+  console.log("\nWindows PowerShell:");
+  console.log(`  $header = Get-Content payment-header.txt -Raw`);
+  console.log(`  curl -H "X-PAYMENT: $header" https://api.example.com/paid-endpoint`);
+
+  console.log("\n📤 Option 2: Direct Settlement (via Megalith facilitator)");
+  console.log("Send directly to facilitator for settlement without resource access:");
+  console.log(`  curl.exe -X POST ${FACILITATOR_API}/settle --% -H "Content-Type: application/json" -d @payload.json`);
+
+  if (!isEIP3009) {
+    console.log("\n⚠️  IMPORTANT: For ERC-20 tokens, run: npm run approve");
+    console.log("    This approves the MegalithStargate contract to spend your tokens.");
   }
 
   console.log("\n💻 Local testing:");
   console.log(`  curl.exe -X POST http://localhost:3000/settle --% -H "Content-Type: application/json" -d @payload.json`);
+
+  console.log("\n📁 Generated files:");
+  console.log("  - payload.json           (Full x402 payload for facilitator POST)");
+  console.log("  - payment-header.txt     (Base64 string for X-PAYMENT header)");
+  console.log("  - x402-payment.json      (Decoded x402 payment object)");
+  console.log("  - payloads/payload-*.json (Timestamped backup)");
   
   console.log("\n=============\n");
 
-  console.log("✅ Payment authorization created successfully!");
+  console.log("✅ x402-compliant payment authorization created successfully!");
   console.log("Network:", networkConfig.name, `(Chain ID: ${NETWORK})`);
   console.log("Type:", isEIP3009 ? "EIP-3009 (direct)" : "ERC-20 (via MegalithStargate)");
   console.log("From:", wallet.address);
   console.log("To:", RECIPIENT);
   console.log("Amount:", ethers.formatUnits(value, tokenDecimals), tokenSymbol || "tokens");
-  console.log("The facilitator will pay the gas fees.");
+  console.log("Protocol: x402 v1 (exact scheme)");
+  console.log("\nThe facilitator will pay the gas fees when settling.");
 
 })().catch(error => {
   console.error("\n❌ Error:", error.message);

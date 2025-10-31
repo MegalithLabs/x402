@@ -1,7 +1,9 @@
 // Megalith x402 Token Approval Tool
 // Approves ERC-20 tokens for use with MegalithStargate contract
+// Required for standard ERC-20 tokens (not needed for EIP-3009 tokens)
+// Part of the x402 payment protocol implementation
 // Supports BNB Chain Mainnet (56) and Testnet (97)
-// https://megalithlabs.ai
+// https://megalithlabs.ai | https://x402.org
 
 const { ethers } = require('ethers');
 const fs = require('fs');
@@ -95,7 +97,7 @@ function formatAmount(amount, decimals) {
 // ============================================
 
 async function main() {
-  console.log(`\n${colors.bright}=== x402 Token Approval ===${colors.reset}\n`);
+  console.log(`\n${colors.bright}=== x402 Token Approval Tool ===${colors.reset}\n`);
 
   // ============================================
   // LOAD CONFIGURATION
@@ -195,7 +197,7 @@ async function main() {
     console.log(`${colors.blue}Your Balance:${colors.reset} ${formatAmount(balance, decimals)} ${symbol}\n`);
 
     console.log(`${colors.cyan}Current allowance:${colors.reset} ${formatAmount(currentAllowance, decimals)} ${symbol}`);
-    console.log(`${colors.cyan}Spender (Stargate):${colors.reset} ${stargateAddress}\n`);
+    console.log(`${colors.cyan}Spender (MegalithStargate):${colors.reset} ${stargateAddress}\n`);
 
     // ============================================
     // DETERMINE APPROVAL AMOUNT
@@ -217,7 +219,7 @@ async function main() {
     if (approvalAmount === ethers.MaxUint256) {
       console.log(`\n${colors.red}${colors.bright}⚠  WARNING ⚠${colors.reset}`);
       console.log(`${colors.yellow}You are approving UNLIMITED token spend!${colors.reset}`);
-      console.log(`${colors.yellow}The Stargate contract will be able to transfer any amount of ${symbol} from your wallet.${colors.reset}`);
+      console.log(`${colors.yellow}The MegalithStargate contract will be able to transfer any amount of ${symbol} from your wallet.${colors.reset}`);
       console.log(`${colors.yellow}Only proceed if you trust the contract: ${stargateAddress}${colors.reset}\n`);
     }
 
@@ -253,7 +255,8 @@ async function main() {
       const newAllowance = await token.allowance(approver, stargateAddress);
       console.log(`${colors.green}New allowance:${colors.reset} ${newAllowance === ethers.MaxUint256 ? 'UNLIMITED' : formatAmount(newAllowance, decimals)} ${symbol}\n`);
       
-      console.log(`${colors.bright}You can now create payments with this token using signer.js${colors.reset}\n`);
+      console.log(`${colors.bright}✓ Token approved for x402 payments!${colors.reset}`);
+      console.log(`${colors.bright}You can now create payment authorizations with signer.js${colors.reset}\n`);
     } else {
       console.log(`\n${colors.red}✗ Transaction failed${colors.reset}`);
       process.exit(1);

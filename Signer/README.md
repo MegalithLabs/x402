@@ -1,6 +1,26 @@
 # Megalith x402 Payment Signer
 
-Create signed payment authorizations for both EIP-3009 and standard ERC-20 tokens for supported networks.
+Create x402-compliant payment authorizations for both EIP-3009 and standard ERC-20 tokens on supported networks.
+
+**Part of the x402 protocol**: An open standard for internet-native payments using HTTP 402 status codes.
+
+Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.ai)
+
+---
+
+## What is x402?
+
+x402 is an open payment protocol that enables AI agents and web services to autonomously pay for API access, data, and digital services using stablecoins like USDC. It leverages the HTTP 402 "Payment Required" status code to enable:
+
+- 🤖 **AI-native payments** - Agents pay for APIs autonomously
+- 💰 **Micropayments** - Transactions as low as $0.001
+- ⚡ **Instant settlement** - ~200ms on Layer 2
+- 🔓 **No accounts required** - Pay-per-use without registration
+- 🌐 **Chain agnostic** - Works on any blockchain
+
+This signer creates x402-compliant payment authorizations that can be used with any x402-compatible API or facilitator service.
+
+---
 
 ## Important: Terminal Differences
 
@@ -9,13 +29,13 @@ Create signed payment authorizations for both EIP-3009 and standard ERC-20 token
 ### Windows PowerShell (Most Windows Users)
 Use `curl.exe` with the `--%` flag:
 ```powershell
-curl.exe -X POST https://x402.megalithlabs.ai/verify --% -H "Content-Type: application/json" -d @payload.json
+curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: application/json" -d @payload.json
 ```
 
 ### Windows CMD / Git Bash / Linux / macOS
 Use standard `curl`:
 ```bash
-curl -X POST https://x402.megalithlabs.ai/verify -H "Content-Type: application/json" -d @payload.json
+curl -X POST https://x402.megalithlabs.ai/settle -H "Content-Type: application/json" -d @payload.json
 ```
 
 **All examples below show both formats.**
@@ -24,10 +44,12 @@ curl -X POST https://x402.megalithlabs.ai/verify -H "Content-Type: application/j
 
 ## Features
 
+- ✅ **x402 Protocol Compliant**: Outputs standard x402 v1 payment payloads
 - ✅ **EIP-3009 Support**: Direct authorization for USDC and other EIP-3009 tokens
 - ✅ **Standard ERC-20 Support**: Works with any ERC-20 token via MegalithStargate
 - ✅ **Multi-Network**: V1 supports BNB Chain Mainnet (56) and Testnet (97)
 - ✅ **Automatic Detection**: Auto-detects token type and configures appropriately
+- ✅ **Dual Output Format**: Creates both facilitator POST and X-PAYMENT header formats
 - ✅ **API Contract Fetching**: Automatically uses latest Stargate contract version
 - ✅ **Token Approval Tool**: Easy approval for standard ERC-20 tokens
 - ✅ **Secure Signing**: All signing happens locally with your private key
@@ -53,16 +75,16 @@ nano signer.env
 
 **Required fields:**
 ```bash
-NETWORK=56			# 56=BNB Mainnet, 97=BNB testnet
-PAYER_KEY=0x...			# Your private key
-RECIPIENT=0x...		# Token recipient
-TOKEN=0x...			# Token to send
-AMOUNT=10.0			# Human-readable number of tokens to send
+NETWORK=56              # 56=BNB Mainnet, 97=BNB testnet
+PAYER_KEY=0x...         # Your private key
+RECIPIENT=0x...         # Token recipient
+TOKEN=0x...             # Token to send
+AMOUNT=10.0             # Human-readable number of tokens to send
 
 # Stargate contract (leave empty to fetch from API automatically)
 STARGATE_CONTRACT=
 
-# See signer.env for more guidance on all fields
+# See signer.env.example for detailed guidance
 ```
 
 ### 3. Approve Token (Standard ERC-20 Only)
@@ -85,25 +107,35 @@ npm run sign
 
 Or directly: `node signer.js`
 
-This creates:
-- `payload.json` - Ready to send to facilitator
-- `payloads/payload-TIMESTAMP.json` - Archived copy
+This creates **four files**:
+- `payload.json` - Full x402 payload for POST to facilitator
+- `payment-header.txt` - Base64 string for X-PAYMENT HTTP header
+- `x402-payment.json` - Decoded payment object (for debugging)
+- `payloads/payload-TIMESTAMP.json` - Timestamped backup
 
-### 5. Test the Payment
+### 5. Use the Payment
 
-**Verify the payment (validates without executing):**
+**Option 1: Send to x402-Compatible Resource Server (Standard x402)**
+
+Use the `X-PAYMENT` header to pay for and access resources in one request:
 
 **Windows PowerShell:**
 ```powershell
-curl.exe -X POST https://x402.megalithlabs.ai/verify --% -H "Content-Type: application/json" -d @payload.json
+$header = Get-Content payment-header.txt -Raw
+curl.exe -H "X-PAYMENT: $header" https://api.example.com/paid-endpoint
 ```
 
-**Windows CMD / Git Bash / Linux / macOS:**
+**Linux / macOS / Git Bash:**
 ```bash
-curl -X POST https://x402.megalithlabs.ai/verify -H "Content-Type: application/json" -d @payload.json
+curl -H "X-PAYMENT: $(cat payment-header.txt)" \
+     https://api.example.com/paid-endpoint
 ```
 
-**Execute the payment:**
+The resource server will verify your payment with a facilitator and return the data.
+
+**Option 2: Direct Settlement via Facilitator**
+
+Send directly to the Megalith facilitator for payment settlement without resource access:
 
 **Windows PowerShell:**
 ```powershell
@@ -112,14 +144,42 @@ curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: appli
 
 **Windows CMD / Git Bash / Linux / macOS:**
 ```bash
-curl -X POST https://x402.megalithlabs.ai/settle -H "Content-Type: application/json" -d @payload.json
+curl -X POST https://x402.megalithlabs.ai/settle \
+     -H "Content-Type: application/json" \
+     -d @payload.json
 ```
+
+---
+
+## x402 Payment Flow
+
+### Standard x402 Flow (Resource Access)
+
+```
+1. Client → Resource Server: GET /api/data
+2. Resource Server → Client: 402 Payment Required + payment details
+3. Client signs payment locally (signer.js)
+4. Client → Resource Server: GET /api/data + X-PAYMENT header
+5. Resource Server → Facilitator: Verify & settle payment
+6. Resource Server → Client: 200 OK + the actual data
+```
+
+### Direct Settlement Flow (No Resource)
+
+```
+1. Client signs payment locally (signer.js)
+2. Client → Facilitator: POST /settle with payload
+3. Facilitator → Blockchain: Broadcast transaction
+4. Facilitator → Client: Transaction receipt
+```
+
+Both flows use the same signed authorization - the difference is who calls the facilitator!
 
 ---
 
 ## Token Approval (Standard ERC-20 Only)
 
-Before creating payments with standard ERC-20 tokens, you must approve the Stargate contract.
+Before creating payments with standard ERC-20 tokens, you must approve the MegalithStargate contract.
 
 ### Quick Approval
 
@@ -130,16 +190,73 @@ npm run approve
 ```
 
 **What gets approved?**
-The MegalithStargate contract needs permission to transfer tokens from your wallet. This is a one-time approval per token (unless you revoke it or Stargate upgrades).
+The MegalithStargate contract needs permission to transfer tokens from your wallet. This is a one-time approval per token (unless you revoke it or the contract upgrades).
 
 **Features:**
 - ✅ Automatically fetches latest Stargate address from API
 - ✅ Shows current allowance before approving
 - ✅ Supports "unlimited" approval (recommended)
-- ✅ Interactive confirmation prompts
+- ✅ Interactive confirmation prompts with security warnings
 - ✅ Color-coded terminal output
 
 **EIP-3009 tokens don't need approval** - they support direct authorization!
+
+---
+
+## x402 Payload Structure
+
+The signer creates x402 v1 compliant payloads:
+
+### For X-PAYMENT Header (Standard x402)
+
+```json
+{
+  "x402Version": 1,
+  "scheme": "exact",
+  "network": "56",
+  "payload": {
+    "authorization": {
+      "from": "0x...",
+      "to": "0x...",
+      "value": "1000000",
+      "validAfter": 1730304000,
+      "validBefore": 1730307600,
+      "nonce": "0x...",
+      "v": 27,
+      "r": "0x...",
+      "s": "0x..."
+    }
+  }
+}
+```
+
+This object is base64-encoded and placed in the `X-PAYMENT` HTTP header.
+
+### For Facilitator POST (Direct Settlement)
+
+```json
+{
+  "x402Version": 1,
+  "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoi...",
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "56",
+    "maxAmountRequired": "1000000",
+    "resource": "/api/settlement",
+    "description": "Payment of 1.0 USDC",
+    "mimeType": "application/json",
+    "payTo": "0x...",
+    "maxTimeoutSeconds": 30,
+    "asset": "0x...",
+    "extra": {
+      "name": "USD Coin",
+      "version": "2"
+    }
+  }
+}
+```
+
+Both formats contain the same authorization - just packaged differently for different use cases.
 
 ---
 
@@ -147,8 +264,10 @@ The MegalithStargate contract needs permission to transfer tokens from your wall
 
 ### Production (x402.megalithlabs.ai)
 
+The Megalith facilitator implements the x402 protocol specification.
+
 #### Verify Payment
-Validates the payment authorization without executing it.
+Validates the payment authorization without executing it (x402 `/verify` endpoint).
 
 **Windows PowerShell:**
 ```powershell
@@ -157,26 +276,23 @@ curl.exe -X POST https://x402.megalithlabs.ai/verify --% -H "Content-Type: appli
 
 **Windows CMD / Git Bash / Linux / macOS:**
 ```bash
-curl -X POST https://x402.megalithlabs.ai/verify -H "Content-Type: application/json" -d @payload.json
+curl -X POST https://x402.megalithlabs.ai/verify \
+     -H "Content-Type: application/json" \
+     -d @payload.json
 ```
 
-**Response:**
+**x402 Response:**
 ```json
 {
-  "valid": true,
-  "message": "Payment authorization is valid",
-  "details": {
-    "from": "0x1234...",
-    "to": "0x5678...",
-    "amount": "100000000000000000",
-    "token": "0xabcd...",
-    "network": 56
-  }
+  "isValid": true,
+  "invalidReason": null,
+  "tokenType": "EIP-3009",
+  "network": "BNB Chain Mainnet"
 }
 ```
 
 #### Settle Payment
-Executes the payment on-chain.
+Executes the payment on-chain (x402 `/settle` endpoint).
 
 **Windows PowerShell:**
 ```powershell
@@ -185,15 +301,20 @@ curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: appli
 
 **Windows CMD / Git Bash / Linux / macOS:**
 ```bash
-curl -X POST https://x402.megalithlabs.ai/settle -H "Content-Type: application/json" -d @payload.json
+curl -X POST https://x402.megalithlabs.ai/settle \
+     -H "Content-Type: application/json" \
+     -d @payload.json
 ```
 
-**Response:**
+**x402 Response:**
 ```json
 {
-  "success": true,
   "txHash": "0x456pqr...",
-  "message": "Payment settled successfully"
+  "blockNumber": 12345678,
+  "gasUsed": "150000",
+  "status": "success",
+  "network": "BNB Chain Mainnet",
+  "method": "EIP-3009 (direct)"
 }
 ```
 
@@ -225,7 +346,7 @@ curl https://x402.megalithlabs.ai/contracts
 ```
 
 #### Supported Networks
-Get list of supported networks.
+Get list of supported (scheme, network) pairs (x402 `/supported` endpoint).
 
 **Windows PowerShell:**
 ```powershell
@@ -237,22 +358,28 @@ curl.exe https://x402.megalithlabs.ai/supported
 curl https://x402.megalithlabs.ai/supported
 ```
 
-**Response:**
+**x402 Response:**
 ```json
-{
-  "networks": [
-    {
-      "id": 56,
-      "name": "BNB Chain Mainnet",
-      "rpc": "https://bsc-dataseed.binance.org/"
-    },
-    {
-      "id": 97,
-      "name": "BNB Chain Testnet",
-      "rpc": "https://data-seed-prebsc-1-s1.binance.org:8545/"
-    }
-  ]
-}
+[
+  {
+    "scheme": "universal",
+    "network": 56,
+    "networkName": "BNB Chain Mainnet",
+    "description": "Universal settlement (auto-detects EIP-3009 or ERC-20) on BNB Chain Mainnet",
+    "method": "settle",
+    "supportsEIP3009": true,
+    "supportsERC20": true
+  },
+  {
+    "scheme": "universal",
+    "network": 97,
+    "networkName": "BNB Chain Testnet",
+    "description": "Universal settlement (auto-detects EIP-3009 or ERC-20) on BNB Chain Testnet",
+    "method": "settle",
+    "supportsEIP3009": true,
+    "supportsERC20": true
+  }
+]
 ```
 
 #### Health Check
@@ -271,7 +398,22 @@ curl https://x402.megalithlabs.ai/health
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-10-30T14:23:50.123Z"
+  "facilitator": "Universal x402-compliant (EIP-3009 + ERC-20)",
+  "methods": ["settle (universal auto-detect)"],
+  "networks": {
+    "56": {
+      "name": "BNB Chain Mainnet",
+      "rpcConfigured": true,
+      "keyConfigured": true,
+      "facilitatorContract": "0x40200001004B5110333e4De8179426971Efd034A"
+    },
+    "97": {
+      "name": "BNB Chain Testnet",
+      "rpcConfigured": true,
+      "keyConfigured": true,
+      "facilitatorContract": "0x40200001004B5110333e4De8179426971Efd034A"
+    }
+  }
 }
 ```
 
@@ -289,6 +431,7 @@ curl https://x402.megalithlabs.ai/health
 | `TOKEN` | Yes | Token contract address | `0xabcd...` |
 | `AMOUNT` | Yes | Amount in human-readable units | `10.0` |
 | `STARGATE_CONTRACT` | No | Manual Stargate override (leave empty for auto-fetch) | `` |
+| `FACILITATOR_API` | No | Facilitator endpoint (defaults to Megalith) | `https://x402.megalithlabs.ai` |
 
 ### Approval Configuration (approve.env)
 
@@ -299,6 +442,7 @@ curl https://x402.megalithlabs.ai/health
 | `TOKEN` | Yes | Token contract address | `0x55d3...` |
 | `STARGATE_CONTRACT` | No | Manual Stargate override (leave empty for auto-fetch) | `` |
 | `AMOUNT` | No | Approval amount ("unlimited" or specific) | `unlimited` |
+| `FACILITATOR_API` | No | Facilitator endpoint for contract lookup | `https://x402.megalithlabs.ai` |
 
 ### AMOUNT Configuration - Human-Readable Format
 
@@ -332,10 +476,12 @@ AMOUNT=0.5     # Sends 0.5 WBTC = 50000000 base units
 **BNB Chain Mainnet (56):**
 - RPC: `https://bsc-dataseed.binance.org/`
 - Stargate: Auto-fetched from API
+- x402 Scheme: `exact` on network `56`
 
 **BNB Chain Testnet (97):**
 - RPC: `https://data-seed-prebsc-1-s1.binance.org:8545/`
 - Stargate: Auto-fetched from API
+- x402 Scheme: `exact` on network `97`
 
 **Current Stargate:** `0x40200001004B5110333e4De8179426971Efd034A` (v1.0.0)
 
@@ -346,16 +492,19 @@ AMOUNT=0.5     # Sends 0.5 WBTC = 50000000 base units
 ### EIP-3009 Tokens (e.g., USDC)
 - ✅ No approval required
 - ✅ Direct authorization via `transferWithAuthorization`
-- ✅ Gasless for payer
+- ✅ Gasless for payer (facilitator pays gas)
 - ✅ `STARGATE_CONTRACT` not needed
+- 📋 x402 scheme: `exact` with native EIP-3009 support
 
 ### Standard ERC-20 Tokens (e.g., USDT)
 - ⚠️ Requires approval first (use `npm run approve`)
-- ⚠️ Uses MegalithStargate contract
+- ⚠️ Uses MegalithStargate contract for x402 compatibility
 - ✅ Approval is one-time per token
 - ✅ Stargate address auto-fetched from API
+- ✅ Gasless for payer (facilitator pays gas)
+- 📋 x402 scheme: `exact` via Stargate proxy
 
-The Stargate contract is needed because standard ERC-20 tokens don't support the `transferWithAuthorization` function that EIP-3009 tokens have. MegalithStargate brings x402 payments to all ERC-20 tokens.
+The MegalithStargate contract brings x402 payment capabilities to all standard ERC-20 tokens by implementing the same `exact` payment scheme that EIP-3009 tokens have natively.
 
 **To approve a standard ERC-20 token:**
 ```bash
@@ -381,12 +530,12 @@ AMOUNT=unlimited            # "unlimited" or specific amount
 
 ### Common Token Addresses
 
-**BNB Chain Mainnet:**
-| Token | Address |
-|-------|---------|
-| USDT | `0x55d398326f99059fF775485246999027B3197955` |
-| USDC | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` |
-| BUSD | `0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56` |
+**BNB Chain Mainnet (Chain ID 56):**
+| Token | Type | Address |
+|-------|------|---------|
+| USDT | ERC-20 | `0x55d398326f99059fF775485246999027B3197955` |
+| USDC | EIP-3009 | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` |
+| BUSD | ERC-20 | `0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56` |
 
 ### Approval Amount Options
 
@@ -394,9 +543,9 @@ AMOUNT=unlimited            # "unlimited" or specific amount
 ```bash
 AMOUNT=unlimited
 ```
-- ✅ One-time approval for all future payments
+- ✅ One-time approval for all future x402 payments
 - ✅ Saves gas on subsequent transactions
-- ⚠️ Gives Stargate permission to spend any amount
+- ⚠️ Gives Stargate permission to spend any amount (with your signed authorization)
 - ⚠️ Only approve trusted contracts
 
 **Specific Amount:**
@@ -418,12 +567,12 @@ nano approve.env
 npm run approve
 
 # 3. Confirm transaction
-# (Interactive prompt with warnings)
+# (Interactive prompt with security warnings)
 
 # 4. Wait for confirmation
 # ✓ Approval successful!
 
-# 5. Now you can create payments
+# 5. Now you can create x402 payments
 npm run sign
 ```
 
@@ -433,14 +582,16 @@ npm run sign
 
 ```
 signer/
-├── signer.js                 # Payment signing script
+├── signer.js                 # x402 payment signing script
 ├── signer.env                # Your signer config (DO NOT COMMIT)
 ├── signer.env.example        # Signer config template
-├── approve.js                # Token approval script
+├── approve.js                # Token approval script (for ERC-20)
 ├── approve.env               # Your approval config (DO NOT COMMIT)
 ├── approve.env.example       # Approval config template
 ├── package.json              # Dependencies
-├── payload.json              # Latest signed payload (overwrites)
+├── payload.json              # Latest x402 payload (facilitator POST format)
+├── payment-header.txt        # Base64 for X-PAYMENT header
+├── x402-payment.json         # Decoded x402 payment object
 ├── payloads/                 # Archived payloads
 │   ├── payload-2025-10-30T14-23-50.json
 │   ├── payload-2025-10-30T15-45-12.json
@@ -454,6 +605,8 @@ signer.env
 approve.env
 node_modules/
 payload.json
+payment-header.txt
+x402-payment.json
 payloads/
 ```
 
@@ -466,28 +619,41 @@ payloads/
 - **NEVER** share your private key
 - Use environment variables or secure key management
 - Consider using a hardware wallet for production
+- The facilitator **CANNOT** move your funds without your signature
 
 ### 🕒 Time Validity
-- Authorizations are valid for **1 hour** by default
-- Expired authorizations are automatically rejected
+- x402 authorizations are valid for **1 hour** by default
+- Expired authorizations are automatically rejected by x402 facilitators
 - Create new authorizations if expired
 
 ### 💰 Amount Limits
+- x402 uses `maxAmountRequired` to cap payment amounts
 - Double-check the `AMOUNT` before signing
 - Script shows human-readable amount for confirmation
 - Always verify base units match your intention
 
 ### 🌐 Network Selection
-- **Always verify** you're on the correct network
+- **Always verify** you're on the correct network in x402 payloads
 - Mainnet (56) = real money
 - Testnet (97) = test tokens only
-- Script displays current network clearly
+- Script displays network in x402 payload clearly
 
-### ⚠️ Unlimited Approvals
+### ⚠️ Unlimited Approvals (ERC-20 Only)
 - Only approve contracts you trust
-- MegalithStargate is audited and secure
+- MegalithStargate is audited and non-custodial
 - Can revoke approvals anytime via block explorer
 - Consider specific amounts for extra caution
+- The contract **CANNOT** move tokens without your signed x402 authorization
+
+### 🔒 x402 Trust Model
+You trust:
+- ✅ MegalithStargate contract (audited, open source, non-custodial)
+- ✅ Your own signed authorizations (you control the private key)
+
+You don't need to trust:
+- ❌ The facilitator (cannot move funds without your signature)
+- ❌ The recipient (cannot pull funds, only receive what you authorize)
+- ❌ The resource server (just forwards payment to facilitator)
 
 ---
 
@@ -524,34 +690,38 @@ npm run approve
    ```
    (This is max uint256 for unlimited approval)
 
-### "Payment verification failed"
+### "Payment verification failed" (x402 /verify endpoint)
 
 - Check if authorization expired (1 hour validity)
 - Verify payer has sufficient balance
-- Ensure correct network configuration
+- Ensure correct network in x402 payload
 - Confirm token address is correct
+- Check x402Version is 1
+- Verify scheme is "exact"
 
-### "Invalid signature"
+### "Invalid signature" (x402 payload issue)
 - Verify `PAYER_KEY` is correct
-- Check that signer matches the payer address
+- Check that signer matches the `from` address in authorization
 - Ensure no modifications to payload.json after signing
+- Verify EIP-712 domain matches token/contract requirements
 
 ### Transaction Reverts with "status: 0"
 This usually means:
-1. **Insufficient allowance** - Run `npm run approve`
+1. **Insufficient allowance** (ERC-20) - Run `npm run approve`
 2. **Nonce already used** - Create new payment with `npm run sign`
 3. **Insufficient balance** - Payer doesn't have enough tokens
-4. **Insufficient gas** - Payer needs more BNB (for approve.js only)
+4. **Insufficient gas** - Facilitator needs more BNB (should not happen)
+5. **Authorization expired** - Create fresh authorization
 
 ### Windows PowerShell curl Issues
 Use `curl.exe` with `--%` flag:
 ```powershell
-curl.exe -X POST https://x402.megalithlabs.ai/verify --% -H "Content-Type: application/json" -d @payload.json
+curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: application/json" -d @payload.json
 ```
 
 ### "APPROVER_KEY" vs "PAYER_KEY" Confusion
 - **APPROVER_KEY** (approve.env) = Wallet that holds the tokens for approval
-- **PAYER_KEY** (signer.env) = Wallet that signs the payment authorization
+- **PAYER_KEY** (signer.env) = Wallet that signs the x402 payment authorization
 
 Usually these are the same wallet, but they can be different.
 
@@ -561,12 +731,19 @@ Old payloads in `payloads/` folder are kept for audit purposes. They expire afte
 rm -rf payloads/
 ```
 
+### x402 Payload Format Issues
+If you're integrating with a different x402 facilitator and getting errors:
+- Verify they support x402 v1
+- Check they support the `exact` scheme
+- Confirm network ID format (string vs number)
+- Test with `/verify` endpoint first before `/settle`
+
 ---
 
 ## NPM Scripts
 
 ```bash
-npm run sign      # Create payment authorization (node signer.js)
+npm run sign      # Create x402 payment authorization (node signer.js)
 npm run approve   # Approve tokens for Stargate (node approve.js)
 ```
 
@@ -578,11 +755,39 @@ node approve.js
 
 ---
 
+## x402 Protocol Specifications
+
+This implementation follows the x402 v1 specification:
+
+### Supported Schemes
+- `exact` - Fixed payment amount (what this signer creates)
+
+### Supported Networks
+- `56` (BNB Chain Mainnet)
+- `97` (BNB Chain Testnet)
+
+### Payment Methods
+- **EIP-3009**: Native `transferWithAuthorization`
+- **ERC-20 + Stargate**: Proxy authorization via MegalithStargate
+
+### Signature Standard
+- **EIP-712**: Typed structured data signing
+- Prevents signature replay across chains and contracts
+
+### Settlement
+- Facilitator broadcasts transaction on-chain
+- Instant finality (~200ms on BNB Chain)
+- Gasless for payer (facilitator pays gas)
+
+---
+
 ## Support
 
 - 🌐 Website: https://megalithlabs.ai
+- 🌐 x402 Protocol: https://x402.org
 - 📧 Email: support@megalithlabs.ai
 - 🐛 Issues: https://github.com/megalithlabs/x402/issues
+- 📚 Docs: https://github.com/MegalithLabs/x402
 
 ---
 
@@ -594,7 +799,14 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
-### v1.1.0 (Upcoming)
+### v2.0.0 (Current)
+- **x402 Protocol Compliance**: Full x402 v1 specification support
+- **Dual Output Format**: Creates both X-PAYMENT header and facilitator POST formats
+- **New Files**: payment-header.txt and x402-payment.json for flexibility
+- **Enhanced Payload**: Added x402Version, scheme, maxAmountRequired, etc.
+- **Updated Documentation**: Complete x402 terminology and usage patterns
+
+### v1.1.0
 - Added token approval tool (approve.js)
 - API contract fetching for latest Stargate addresses
 - Improved configuration with auto-detection
