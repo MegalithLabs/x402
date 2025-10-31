@@ -48,7 +48,8 @@ curl -X POST https://x402.megalithlabs.ai/settle -H "Content-Type: application/j
 - ✅ **EIP-3009 Support**: Direct authorization for USDC and other EIP-3009 tokens
 - ✅ **Standard ERC-20 Support**: Works with any ERC-20 token via MegalithStargate
 - ✅ **Multi-Network**: V1 supports BNB Chain Mainnet (56) and Testnet (97)
-- ✅ **Automatic Detection**: Auto-detects token type and configures appropriately
+- ✅ **Automatic Token Detection**: Auto-detects token type and signs appropriately
+- ✅ **Smart Scheme Hints**: Uses "exact" scheme (Megalith facilitator auto-detects if needed)
 - ✅ **Dual Output Format**: Creates both facilitator POST and X-PAYMENT header formats
 - ✅ **API Contract Fetching**: Automatically uses latest Stargate contract version
 - ✅ **Token Approval Tool**: Easy approval for standard ERC-20 tokens
@@ -174,6 +175,47 @@ curl -X POST https://x402.megalithlabs.ai/settle \
 ```
 
 Both flows use the same signed authorization - the difference is who calls the facilitator!
+
+---
+
+## Scheme Field and Facilitator Compatibility
+
+### How This Signer Sets the Scheme
+
+This signer **intelligently sets the scheme based on token type detection**:
+- ✅ **EIP-3009 tokens** (like USDC) → `scheme: "eip3009"` (native authorization)
+- ✅ **Standard ERC-20 tokens** (like USDT) → `scheme: "exact"` (Stargate proxy)
+
+The signer automatically detects the token type and sets the correct scheme.
+
+### How It Works
+
+1. **Signer detects token type** by calling `authorizationState()` on the token
+2. **If EIP-3009 detected**:
+   - Signs with EIP-3009 `transferWithAuthorization` format
+   - Sets `scheme: "eip3009"`
+3. **If standard ERC-20 detected**:
+   - Signs with Stargate proxy format
+   - Sets `scheme: "exact"`
+
+### Compatibility with Facilitators
+
+**This signer works with:**
+- ✅ **Megalith facilitator** - Accepts both schemes and has auto-detection fallback
+- ✅ **Facilitators that require explicit schemes** - Signer provides correct scheme
+- ✅ **Facilitators with auto-detection** - Scheme hint makes routing faster
+
+**Why both approaches work:**
+- The **scheme field** tells the facilitator which method was used
+- The **Megalith facilitator** can also auto-detect as a fallback if needed
+- If scheme and signature mismatch, verification fails safely
+
+### Trust Model
+
+- The signer **detects and labels** the payment method via the `scheme` field
+- The facilitator **trusts but verifies** - signature must match the claimed scheme
+- If the signature doesn't match the scheme, verification fails safely
+- This provides both performance (via scheme hint) and security (via verification)
 
 ---
 
@@ -697,7 +739,9 @@ npm run approve
 - Ensure correct network in x402 payload
 - Confirm token address is correct
 - Check x402Version is 1
-- Verify scheme is "exact"
+- **Scheme field**: Megalith facilitator accepts "exact" and auto-detects token type
+  - Other facilitators may require specific schemes
+  - See "Scheme Field and Facilitator Compatibility" section above
 
 ### "Invalid signature" (x402 payload issue)
 - Verify `PAYER_KEY` is correct
@@ -734,7 +778,10 @@ rm -rf payloads/
 ### x402 Payload Format Issues
 If you're integrating with a different x402 facilitator and getting errors:
 - Verify they support x402 v1
-- Check they support the `exact` scheme
+- Check if they support the schemes this signer uses (`eip3009` and `exact`)
+  - Megalith facilitator: accepts both schemes with auto-detection fallback
+  - Other facilitators: may require specific scheme values
+  - This signer automatically sets the correct scheme based on token detection
 - Confirm network ID format (string vs number)
 - Test with `/verify` endpoint first before `/settle`
 
@@ -760,7 +807,22 @@ node approve.js
 This implementation follows the x402 v1 specification:
 
 ### Supported Schemes
-- `exact` - Fixed payment amount (what this signer creates)
+
+This signer **automatically sets the correct scheme** based on token detection:
+
+**How the signer determines scheme:**
+1. Detects if token implements EIP-3009 (by checking `authorizationState` function)
+2. **EIP-3009 tokens** → Sets `scheme: "eip3009"`
+3. **Standard ERC-20 tokens** → Sets `scheme: "exact"`
+
+**Available schemes:**
+- `eip3009` - Native EIP-3009 authorization (used for USDC and similar tokens)
+- `exact` - Stargate proxy authorization (used for standard ERC-20 tokens like USDT)
+
+**Facilitator compatibility:**
+- **Megalith facilitator** accepts both schemes and has auto-detection fallback
+- **Other facilitators** may require specific schemes - this signer provides them correctly
+- The scheme field serves as a **performance hint** while signatures provide **security**
 
 ### Supported Networks
 - `56` (BNB Chain Mainnet)
@@ -799,7 +861,13 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
-### v2.0.0 (Current)
+### v2.1.0 (Current)
+- **Clarified Scheme Behavior**: Documentation now explains that signer uses "exact" for all tokens
+- **Facilitator Auto-Detection**: Megalith facilitator now intelligently auto-detects token types
+- **Better Compatibility**: Works with any x402 facilitator (with or without auto-detection)
+- **Enhanced Documentation**: Added section on scheme field and trust model
+
+### v2.0.0
 - **x402 Protocol Compliance**: Full x402 v1 specification support
 - **Dual Output Format**: Creates both X-PAYMENT header and facilitator POST formats
 - **New Files**: payment-header.txt and x402-payment.json for flexibility
