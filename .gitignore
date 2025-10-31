@@ -1,0 +1,17 @@
+# Environment files
+.env
+*.env
+signer.env
+approve.env
+
+# Node modules
+node_modules/
+
+# Generated payloads
+payload.json
+payment-header.txt
+x402-payment.json
+payloads/
+
+# Logs
+*.log
