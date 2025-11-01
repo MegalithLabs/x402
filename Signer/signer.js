@@ -1,6 +1,6 @@
 // Megalith x402 Signer & Payload Creator
 // Supports both EIP-3009 and standard ERC-20 tokens
-// Supports BNB Chain (bsc, bsc-testnet) and Base (base)
+// Supports BNB Chain (bsc, bsc-testnet)
 // https://megalithlabs.ai
 
 console.log("=== Megalith x402 Signer & Payload Creator ===\n");
@@ -49,14 +49,14 @@ async function fetchStargateContract(network) {
   // LOAD CONFIGURATION
   // ============================================
   
-  const NETWORK = process.env.NETWORK || 'bsc';  // Text name like 'bsc', 'bsc-testnet', 'base'
+  const NETWORK = process.env.NETWORK || 'bsc';  // Text name like 'bsc', 'bsc-testnet',
   const PAYER_KEY = process.env.PAYER_KEY;
   const RECIPIENT = process.env.RECIPIENT;
   const TOKEN = process.env.TOKEN;
   const AMOUNT = process.env.AMOUNT;
   let STARGATE_CONTRACT = process.env.STARGATE_CONTRACT;
   
-  // Network-specific configuration - using text names per Coinbase x402 standard
+  // Network-specific configuration - text names, not number IDs
   const NETWORK_CONFIG = {
     'bsc': {
       name: 'BNB Chain Mainnet',
@@ -67,12 +67,6 @@ async function fetchStargateContract(network) {
       name: 'BNB Chain Testnet',
       chainId: 97,
       rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/'
-    },
-    'base': {
-      name: 'Base Mainnet',
-      chainId: 8453,
-      rpcUrl: 'https://mainnet.base.org'
-    }
   };
 
   // ============================================
@@ -82,7 +76,7 @@ async function fetchStargateContract(network) {
   // Validate network
   if (!NETWORK_CONFIG[NETWORK]) {
     console.error("❌ Invalid NETWORK in signer.env");
-    console.error("Supported networks: bsc, bsc-testnet, base");
+    console.error("Supported networks: bsc, bsc-testnet");
     console.error("You provided:", NETWORK);
     process.exit(1);
   }
@@ -286,7 +280,7 @@ async function fetchStargateContract(network) {
     console.log("✅ Signature created successfully");
     console.log("→ Using scheme: exact (EIP-3009 native authorization)");
 
-    // Coinbase x402-compliant payload format
+    // x402-compliant payload format
     const paymentPayload = {
       x402Version: 1,
       scheme: "exact",
@@ -408,7 +402,7 @@ async function fetchStargateContract(network) {
     console.log("✅ Signature created successfully");
     console.log("→ Using scheme: exact (Stargate proxy for standard ERC-20)");
 
-    // Coinbase x402-compliant payload format
+    // x402-compliant payload format
     const paymentPayload = {
       x402Version: 1,
       scheme: "exact",
