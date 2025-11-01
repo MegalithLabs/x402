@@ -1,6 +1,6 @@
 // Megalith x402 Signer & Payload Creator
 // Supports both EIP-3009 and standard ERC-20 tokens
-// Supports BNB Chain Mainnet (56) and Testnet (97)
+// Supports BNB Chain (bsc, bsc-testnet) and Base (base)
 // https://megalithlabs.ai
 
 console.log("=== Megalith x402 Signer & Payload Creator ===\n");
@@ -49,22 +49,29 @@ async function fetchStargateContract(network) {
   // LOAD CONFIGURATION
   // ============================================
   
-  const NETWORK = parseInt(process.env.NETWORK) || 56;
+  const NETWORK = process.env.NETWORK || 'bsc';  // Text name like 'bsc', 'bsc-testnet', 'base'
   const PAYER_KEY = process.env.PAYER_KEY;
   const RECIPIENT = process.env.RECIPIENT;
   const TOKEN = process.env.TOKEN;
   const AMOUNT = process.env.AMOUNT;
   let STARGATE_CONTRACT = process.env.STARGATE_CONTRACT;
   
-  // Network-specific configuration
+  // Network-specific configuration - using text names per Coinbase x402 standard
   const NETWORK_CONFIG = {
-    56: {
+    'bsc': {
       name: 'BNB Chain Mainnet',
+      chainId: 56,
       rpcUrl: 'https://bsc-dataseed.binance.org/'
     },
-    97: {
+    'bsc-testnet': {
       name: 'BNB Chain Testnet',
+      chainId: 97,
       rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/'
+    },
+    'base': {
+      name: 'Base Mainnet',
+      chainId: 8453,
+      rpcUrl: 'https://mainnet.base.org'
     }
   };
 
@@ -75,7 +82,8 @@ async function fetchStargateContract(network) {
   // Validate network
   if (!NETWORK_CONFIG[NETWORK]) {
     console.error("❌ Invalid NETWORK in signer.env");
-    console.error("Supported networks: 56 (BNB Mainnet), 97 (BNB Testnet)");
+    console.error("Supported networks: bsc, bsc-testnet, base");
+    console.error("You provided:", NETWORK);
     process.exit(1);
   }
 
@@ -87,8 +95,7 @@ async function fetchStargateContract(network) {
     process.exit(1);
   }
 
-  console.log("=== Megalith x402 Payment Authorization Creator ===\n");
-  console.log("Network:", networkConfig.name, `(Chain ID: ${NETWORK})`);
+   console.log("Network:", networkConfig.name, `(${NETWORK}, Chain ID: ${networkConfig.chainId})`);
   console.log("RPC:", networkConfig.rpcUrl);
   console.log("Token:", TOKEN);
   console.log("Recipient:", RECIPIENT);
@@ -189,7 +196,7 @@ async function fetchStargateContract(network) {
       
       if (!STARGATE_CONTRACT) {
         console.error("\n❌ ERROR: Could not get Stargate contract address");
-        console.error(`Network: ${networkConfig.name} (Chain ID: ${NETWORK})`);
+        console.error(`Network: ${networkConfig.name} (${NETWORK}, Chain ID: ${networkConfig.chainId})`);
         console.error("\nFor standard ERC-20 tokens, you must either:");
         console.error("  1. Let the script fetch from API (leave STARGATE_CONTRACT empty)");
         console.error("  2. Set STARGATE_CONTRACT manually in signer.env");
@@ -249,7 +256,7 @@ async function fetchStargateContract(network) {
     domain = { 
       name: tokenName,
       version: tokenVersion,
-      chainId: NETWORK,
+      chainId: networkConfig.chainId,
       verifyingContract: TOKEN 
     };
 
@@ -275,53 +282,50 @@ async function fetchStargateContract(network) {
     };
 
     sig = await wallet.signTypedData(domain, types, message);
-    const { v, r, s } = ethers.Signature.from(sig);
 
     console.log("✅ Signature created successfully");
-    console.log("→ Using scheme: eip3009 (native EIP-3009 authorization)");
+    console.log("→ Using scheme: exact (EIP-3009 native authorization)");
 
-    // x402-compliant payment payload for X-PAYMENT header
-    const x402Payment = {
+    // Coinbase x402-compliant payload format
+    const paymentPayload = {
       x402Version: 1,
-      scheme: "eip3009",  // EIP-3009 tokens use native transferWithAuthorization
-      network: NETWORK.toString(),
+      scheme: "exact",
+      network: NETWORK,
       payload: {
+        signature: sig,
         authorization: {
           from: message.from,
           to: message.to,
           value: message.value.toString(),
           validAfter: message.validAfter,
           validBefore: message.validBefore,
-          nonce: message.nonce,
-          v: Number(v),
-          r: r.toString(),
-          s: s.toString()
+          nonce: message.nonce
         }
       }
     };
 
-    // x402-compliant payment requirements
-    const x402Requirements = {
-      scheme: "eip3009",  // EIP-3009 tokens use native transferWithAuthorization
-      network: NETWORK.toString(),
+    const paymentRequirements = {
+      scheme: "exact",
+      network: NETWORK,
       maxAmountRequired: message.value.toString(),
       resource: "/api/settlement",
       description: `Payment of ${ethers.formatUnits(value, tokenDecimals)} ${tokenSymbol || 'tokens'}`,
       mimeType: "application/json",
+      outputSchema: { data: "string" },
       payTo: RECIPIENT,
       maxTimeoutSeconds: 30,
       asset: TOKEN,
       extra: {
         name: tokenName,
-        version: tokenVersion
+        version: tokenVersion,
+        gasLimit: "200000"
       }
     };
 
-    // Combined payload for facilitator POST (backwards compatible)
     payload = {
       x402Version: 1,
-      paymentHeader: Buffer.from(JSON.stringify(x402Payment, replacer)).toString('base64'),
-      paymentRequirements: x402Requirements
+      paymentPayload,
+      paymentRequirements
     };
 
   } else {
@@ -372,7 +376,7 @@ async function fetchStargateContract(network) {
     domain = {
       name: "Megalith",
       version: "1",
-      chainId: NETWORK,
+      chainId: networkConfig.chainId,
       verifyingContract: STARGATE_CONTRACT
     };
 
@@ -400,52 +404,49 @@ async function fetchStargateContract(network) {
     };
 
     sig = await wallet.signTypedData(domain, types, message);
-    const { v, r, s } = ethers.Signature.from(sig);
 
     console.log("✅ Signature created successfully");
     console.log("→ Using scheme: exact (Stargate proxy for standard ERC-20)");
 
-    // x402-compliant payment payload for X-PAYMENT header
-    const x402Payment = {
+    // Coinbase x402-compliant payload format
+    const paymentPayload = {
       x402Version: 1,
-      scheme: "exact",  // Standard ERC-20 tokens use Stargate proxy
-      network: NETWORK.toString(),
+      scheme: "exact",
+      network: NETWORK,
       payload: {
+        signature: sig,
         authorization: {
           from: message.from,
           to: message.to,
           value: message.value.toString(),
           validAfter: message.validAfter,
           validBefore: message.validBefore,
-          nonce: nonce.toString(),
-          v: Number(v),
-          r: r.toString(),
-          s: s.toString()
+          nonce: nonce.toString()
         }
       }
     };
 
-    // x402-compliant payment requirements
-    const x402Requirements = {
-      scheme: "exact",  // Standard ERC-20 tokens use Stargate proxy
-      network: NETWORK.toString(),
+    const paymentRequirements = {
+      scheme: "exact",
+      network: NETWORK,
       maxAmountRequired: message.value.toString(),
       resource: "/api/settlement",
       description: `Payment of ${ethers.formatUnits(value, tokenDecimals)} ${tokenSymbol || 'tokens'}`,
       mimeType: "application/json",
+      outputSchema: { data: "string" },
       payTo: RECIPIENT,
       maxTimeoutSeconds: 30,
       asset: TOKEN,
       extra: {
-        stargateContract: STARGATE_CONTRACT
+        stargateContract: STARGATE_CONTRACT,
+        gasLimit: "300000"
       }
     };
 
-    // Combined payload for facilitator POST (backwards compatible)
     payload = {
       x402Version: 1,
-      paymentHeader: Buffer.from(JSON.stringify(x402Payment, replacer)).toString('base64'),
-      paymentRequirements: x402Requirements
+      paymentPayload,
+      paymentRequirements
     };
   }
 
@@ -468,20 +469,9 @@ async function fetchStargateContract(network) {
   const mainFile = 'payload.json';
   fs.writeFileSync(mainFile, JSON.stringify(payload, replacer, 2));
   console.log(`✅ Saved to: ${mainFile}`);
-
-  // Save just the payment header for X-PAYMENT usage
-  const headerFile = 'payment-header.txt';
-  fs.writeFileSync(headerFile, payload.paymentHeader);
-  console.log(`✅ Saved X-PAYMENT header to: ${headerFile}`);
-
-  // Save the raw x402 payment object (before base64 encoding)
-  const x402File = 'x402-payment.json';
-  const decodedPayment = JSON.parse(Buffer.from(payload.paymentHeader, 'base64').toString());
-  fs.writeFileSync(x402File, JSON.stringify(decodedPayment, replacer, 2));
-  console.log(`✅ Saved x402 payment object to: ${x402File}`);
   
   // Save timestamped backup in payloads folder
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // Remove milliseconds for cleaner name
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
   const archiveFile = `payloads/payload-${timestamp}.json`;
   fs.writeFileSync(archiveFile, JSON.stringify(payload, replacer, 2));
   console.log(`✅ Archived to: ${archiveFile}`);
@@ -491,18 +481,10 @@ async function fetchStargateContract(network) {
   // ============================================
 
   console.log("\n=== USAGE ===");
-  console.log(`Network: ${networkConfig.name} (Chain ID: ${NETWORK})`);
+  console.log(`Network: ${networkConfig.name} (${NETWORK}, Chain ID: ${networkConfig.chainId})`);
   
-  console.log("\n📤 Option 1: Send to Resource Server (standard x402)");
-  console.log("Use the X-PAYMENT header with any x402-compatible API:");
-  console.log(`  curl -H "X-PAYMENT: $(cat payment-header.txt)" \\`);
-  console.log(`       https://api.example.com/paid-endpoint`);
-  console.log("\nWindows PowerShell:");
-  console.log(`  $header = Get-Content payment-header.txt -Raw`);
-  console.log(`  curl -H "X-PAYMENT: $header" https://api.example.com/paid-endpoint`);
-
-  console.log("\n📤 Option 2: Direct Settlement (via Megalith facilitator)");
-  console.log("Send directly to facilitator for settlement without resource access:");
+  console.log("\n📤 Verify & Settle Payment (Coinbase x402 spec compliant)");
+  console.log(`  curl.exe -X POST ${FACILITATOR_API}/verify --% -H "Content-Type: application/json" -d @payload.json`);
   console.log(`  curl.exe -X POST ${FACILITATOR_API}/settle --% -H "Content-Type: application/json" -d @payload.json`);
 
   if (!isEIP3009) {
@@ -511,18 +493,16 @@ async function fetchStargateContract(network) {
   }
 
   console.log("\n💻 Local testing:");
-  console.log(`  curl.exe -X POST http://localhost:3000/settle --% -H "Content-Type: application/json" -d @payload.json`);
+  console.log(`  curl.exe -X POST http://localhost:3000/verify --% -H "Content-Type: application/json" -d @payload.json`);
 
   console.log("\n📁 Generated files:");
-  console.log("  - payload.json           (Full x402 payload for facilitator POST)");
-  console.log("  - payment-header.txt     (Base64 string for X-PAYMENT header)");
-  console.log("  - x402-payment.json      (Decoded x402 payment object)");
+  console.log("  - payload.json           (Coinbase x402 spec compliant)");
   console.log("  - payloads/payload-*.json (Timestamped backup)");
   
   console.log("\n=============\n");
 
   console.log("✅ x402-compliant payment authorization created successfully!");
-  console.log("Network:", networkConfig.name, `(Chain ID: ${NETWORK})`);
+  console.log("Network:", networkConfig.name, `(${NETWORK}, Chain ID: ${networkConfig.chainId})`);
   console.log("Type:", isEIP3009 ? "EIP-3009 (direct)" : "ERC-20 (via MegalithStargate)");
   console.log("From:", wallet.address);
   console.log("To:", RECIPIENT);
