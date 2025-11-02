@@ -278,7 +278,7 @@ async function fetchStargateContract(network) {
     sig = await wallet.signTypedData(domain, types, message);
 
     console.log("✅ Signature created successfully");
-    console.log("→ Using scheme: exact (EIP-3009 native authorization)");
+    console.log("→ Using scheme: exact (exact payment required)");
 
     // x402-compliant payload format
     const paymentPayload = {
@@ -400,7 +400,7 @@ async function fetchStargateContract(network) {
     sig = await wallet.signTypedData(domain, types, message);
 
     console.log("✅ Signature created successfully");
-    console.log("→ Using scheme: exact (Stargate proxy for standard ERC-20)");
+    console.log("→ Using scheme: exact (exact payment required)");
 
     // x402-compliant payload format
     const paymentPayload = {
@@ -501,7 +501,7 @@ async function fetchStargateContract(network) {
   console.log("From:", wallet.address);
   console.log("To:", RECIPIENT);
   console.log("Amount:", ethers.formatUnits(value, tokenDecimals), tokenSymbol || "tokens");
-  console.log("Protocol: x402 v1 (exact scheme)");
+  console.log("Protocol: x402 v1 (scheme: exact)");
   console.log("\nThe facilitator will pay the gas fees when settling.");
 
 })().catch(error => {
