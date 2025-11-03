@@ -34,12 +34,26 @@ const ERC20_ABI = [
   'function balanceOf(address account) view returns (uint256)',
 ];
 
-// RPC endpoints
+// RPC endpoints (with environment variable overrides)
 const RPC_URLS = {
-  '56': 'https://bsc-dataseed.binance.org',
-  '97': 'https://data-seed-prebsc-1-s1.binance.org:8545',
-  '8453': 'https://mainnet.base.org',
-  '84532': 'https://sepolia.base.org',
+  '56': process.env.RPC_BSC || 'https://bsc-dataseed.binance.org',
+  '97': process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545',
+  '8453': process.env.RPC_BASE || 'https://mainnet.base.org',
+  '84532': process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org',
+};
+
+// Network name to chain ID mapping
+const NETWORK_NAMES = {
+  'bsc': '56',
+  'bsc-mainnet': '56',
+  'bsc-testnet': '97',
+  'base': '8453',
+  'base-mainnet': '8453',
+  'base-sepolia': '84532',
+  '56': '56',
+  '97': '97',
+  '8453': '8453',
+  '84532': '84532'
 };
 
 // Facilitator API
@@ -76,11 +90,21 @@ async function fetchStargateContract(network) {
     
     const contracts = await response.json();
     
-    if (!contracts[network]) {
-      throw new Error(`Network ${network} not supported`);
+    // Convert chain ID to network name for API lookup
+    const networkNameMap = {
+      '56': 'bsc',
+      '97': 'bsc-testnet',
+      '8453': 'base',
+      '84532': 'base-sepolia'
+    };
+    
+    const networkName = networkNameMap[network] || network;
+    
+    if (!contracts[networkName]) {
+      throw new Error(`Network ${networkName} not supported`);
     }
     
-    const { stargate, version } = contracts[network];
+    const { stargate, version } = contracts[networkName];
     console.log(`${colors.green}✓${colors.reset} Stargate: ${stargate} (v${version})`);
     return stargate;
   } catch (error) {
@@ -105,7 +129,7 @@ async function main() {
   // LOAD CONFIGURATION
   // ============================================
   
-  const network = process.env.NETWORK;
+  let network = process.env.NETWORK;
   const approverKey = process.env.APPROVER_KEY;
   const tokenAddress = process.env.TOKEN;
   let stargateAddress = process.env.STARGATE_CONTRACT;
@@ -115,8 +139,15 @@ async function main() {
   // VALIDATE CONFIGURATION
   // ============================================
   
+  // Convert network name to chain ID if needed
+  if (network && NETWORK_NAMES[network.toLowerCase()]) {
+    network = NETWORK_NAMES[network.toLowerCase()];
+  }
+  
   if (!network || !RPC_URLS[network]) {
-    console.error(`${colors.red}✗${colors.reset} Invalid NETWORK in approve.env (use 56, 97, 8453, or 84532)`);
+    console.error(`${colors.red}✗${colors.reset} Invalid NETWORK in approve.env`);
+    console.error(`${colors.yellow}→${colors.reset} Use: 56, 97, 8453, 84532`);
+    console.error(`${colors.yellow}→${colors.reset} Or: bsc, bsc-testnet, base, base-sepolia`);
     process.exit(1);
   }
 

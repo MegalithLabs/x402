@@ -1,6 +1,6 @@
 // Megalith x402 Signer & Payload Creator
 // Supports both EIP-3009 and standard ERC-20 tokens
-// Supports BNB Chain (bsc, bsc-testnet)
+// Supports BNB Chain (bsc, bsc-testnet) and Base (base, base-sepolia)
 // https://megalithlabs.ai
 
 console.log("=== Megalith x402 Signer & Payload Creator ===\n");
@@ -61,13 +61,23 @@ async function fetchStargateContract(network) {
     'bsc': {
       name: 'BNB Chain Mainnet',
       chainId: 56,
-      rpcUrl: 'https://bsc-dataseed.binance.org/'
+      rpcUrl: process.env.RPC_BSC || 'https://bsc-dataseed.binance.org/'
     },
     'bsc-testnet': {
       name: 'BNB Chain Testnet',
       chainId: 97,
-      rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/'
-  }
+      rpcUrl: process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
+    },
+    'base': {
+      name: 'Base Mainnet',
+      chainId: 8453,
+      rpcUrl: process.env.RPC_BASE || 'https://mainnet.base.org/'
+    },
+    'base-sepolia': {
+      name: 'Base Sepolia',
+      chainId: 84532,
+      rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
+    }
   };
 
   // ============================================
@@ -77,7 +87,7 @@ async function fetchStargateContract(network) {
   // Validate network
   if (!NETWORK_CONFIG[NETWORK]) {
     console.error("❌ Invalid NETWORK in signer.env");
-    console.error("Supported networks: bsc, bsc-testnet");
+    console.error("Supported networks: bsc, bsc-testnet, base, base-sepolia");
     console.error("You provided:", NETWORK);
     process.exit(1);
   }
@@ -170,11 +180,12 @@ async function fetchStargateContract(network) {
   let isEIP3009 = false;
   try {
     // Try to call authorizationState - only exists on EIP-3009 tokens
-    const testNonce = ethers.randomBytes(32);
+    const testNonce = ethers.hexlify(ethers.randomBytes(32));
     await token.authorizationState(wallet.address, testNonce);
     isEIP3009 = true;
     console.log("✅ EIP-3009 token detected (supports transferWithAuthorization)");
   } catch (e) {
+    console.log("Debug: authorizationState call failed:", e.message);
     isEIP3009 = false;
     console.log("✅ Standard ERC-20 token detected (will use MegalithStargate)");
   }
@@ -279,7 +290,7 @@ async function fetchStargateContract(network) {
     sig = await wallet.signTypedData(domain, types, message);
 
     console.log("✅ Signature created successfully");
-    console.log("→ Using scheme: exact (exact payment required)");
+    console.log("→ Using scheme: exact (EIP-3009 native authorization)");
 
     // x402-compliant payload format
     const paymentPayload = {
@@ -401,7 +412,7 @@ async function fetchStargateContract(network) {
     sig = await wallet.signTypedData(domain, types, message);
 
     console.log("✅ Signature created successfully");
-    console.log("→ Using scheme: exact (exact payment required)");
+    console.log("→ Using scheme: exact (Stargate proxy for standard ERC-20)");
 
     // x402-compliant payload format
     const paymentPayload = {
@@ -502,7 +513,7 @@ async function fetchStargateContract(network) {
   console.log("From:", wallet.address);
   console.log("To:", RECIPIENT);
   console.log("Amount:", ethers.formatUnits(value, tokenDecimals), tokenSymbol || "tokens");
-  console.log("Protocol: x402 v1 (scheme: exact)");
+  console.log("Protocol: x402 v1 (exact scheme)");
   console.log("\nThe facilitator will pay the gas fees when settling.");
 
 })().catch(error => {
