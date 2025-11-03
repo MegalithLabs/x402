@@ -281,7 +281,7 @@ The signer creates Coinbase x402 spec-compliant payloads:
 
 ### Key Fields
 
-- **scheme**: Always `"exact"` - facilitator auto-detects token type
+- **scheme**: Always `"exact"` - i.e. exact payment required
 - **network**: Text name (`"bsc"`, `"bsc-testnet"`)
 - **signature**: Full EIP-712 signature as hex string
 - **nonce**: Random bytes32 (EIP-3009) or sequential uint256 (ERC-20)
@@ -589,7 +589,7 @@ Both result in **gasless transfers** - just different implementations.
 This implementation follows the x402 v1 specification:
 
 ### Supported Scheme
-- `exact` - Exact payment amount required (works with all tokens via auto-detection)
+- `exact` - Exact payment amount required
 
 ### Supported Networks
 - `bsc` (BNB Chain Mainnet, Chain ID 56)
