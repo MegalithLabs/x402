@@ -27,7 +27,7 @@ This signer creates x402-compliant payment authorizations that can be used with 
 - ✅ **x402 Protocol Compliant**: Outputs standard x402 v1 payment payloads
 - ✅ **EIP-3009 Support**: Direct authorization for USDC and other EIP-3009 tokens
 - ✅ **Standard ERC-20 Support**: Works with any ERC-20 token via MegalithStargate
-- ✅ **Multi-Network**: Supports BNB Chain Mainnet and Testnet
+- ✅ **Multi-Network**: Supports BNB Chain and Base (mainnet and testnet)
 - ✅ **Automatic Token Detection**: Auto-detects EIP-3009 vs ERC-20 and signs appropriately
 - ✅ **API Contract Fetching**: Automatically uses latest Stargate contract version
 - ✅ **Token Approval Tool**: Easy approval for standard ERC-20 tokens
@@ -55,7 +55,7 @@ nano signer.env
 
 **Required fields:**
 ```bash
-NETWORK=bsc             # bsc, bsc-testnet
+NETWORK=bsc             # bsc, bsc-testnet, base, base-sepolia
 PAYER_KEY=0x...         # Your private key
 RECIPIENT=0x...         # Token recipient
 TOKEN=0x...             # Token contract address
@@ -115,10 +115,12 @@ curl.exe -X POST https://x402.megalithlabs.ai/settle --% -H "Content-Type: appli
 
 ## Supported Networks
 
-| Network Name | Chain ID | RPC Endpoint |
-|-------------|----------|--------------|
+| Network Name | Chain ID | Description |
+|-------------|----------|-------------|
 | `bsc` | 56 | BNB Chain Mainnet |
 | `bsc-testnet` | 97 | BNB Chain Testnet |
+| `base` | 8453 | Base Mainnet |
+| `base-sepolia` | 84532 | Base Sepolia Testnet |
 
 Always use **text network names** (e.g., `"bsc"`), not numeric chain IDs.
 
@@ -156,7 +158,7 @@ Always use **text network names** (e.g., `"bsc"`), not numeric chain IDs.
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `NETWORK` | Yes | Network name | `bsc` or `bsc-testnet` |
+| `NETWORK` | Yes | Network name | `bsc`, `bsc-testnet`, `base`, or `base-sepolia` |
 | `PAYER_KEY` | Yes | Payer's private key | `0x1234...` |
 | `RECIPIENT` | Yes | Recipient address | `0x5678...` |
 | `TOKEN` | Yes | Token contract address | `0xabcd...` |
@@ -197,7 +199,7 @@ npm run approve
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `NETWORK` | Yes | Network name | `bsc` or `bsc-testnet` |
+| `NETWORK` | Yes | Network chain ID | `56`, `97`, `8453`, or `84532` |
 | `APPROVER_KEY` | Yes | Wallet holding the tokens | `0x1234...` |
 | `TOKEN` | Yes | Token contract address | `0x55d3...` |
 | `STARGATE_CONTRACT` | No | Manual override (leave empty) | `` |
@@ -429,8 +431,8 @@ payloads/
 - The facilitator validates `value >= maxAmountRequired`
 
 ### 🌐 Network Selection
-- **bsc** = Real money (mainnet)
-- **bsc-testnet** = Test tokens only
+- **bsc** / **base** = Real money (mainnet)
+- **bsc-testnet** / **base-sepolia** = Test tokens only
 - Always verify network before signing
 
 ### ⚠️ Token Approvals (ERC-20 Only)
@@ -449,7 +451,7 @@ npm install
 ```
 
 ### "Invalid NETWORK in signer.env"
-Use text names: `bsc` or `bsc-testnet` (not numbers like 56 or 97)
+Use text names: `bsc`, `bsc-testnet`, `base`, or `base-sepolia` (not numbers)
 
 ### "Could not fetch Stargate contract from API"
 Manually set in signer.env:
@@ -592,6 +594,8 @@ This implementation follows the x402 v1 specification:
 ### Supported Networks
 - `bsc` (BNB Chain Mainnet, Chain ID 56)
 - `bsc-testnet` (BNB Chain Testnet, Chain ID 97)
+- `base` (Base Mainnet, Chain ID 8453)
+- `base-sepolia` (Base Sepolia Testnet, Chain ID 84532)
 
 ### Signature Standard
 - **EIP-712**: Typed structured data signing
@@ -622,10 +626,14 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### v1.1.0 (November 2025)
+- Added Base Mainnet and Base Sepolia support
+- Four networks now supported: BNB Chain and Base (mainnet + testnet)
+
 ### v1.0.0 (Current)
 - x402 Protocol v1 compliance
 - EIP-3009 and standard ERC-20 support
-- BNB Chain mainnet and testnet support
+- BNB Chain and Base support (mainnet and testnet)
 - Automatic token type detection
 - MegalithStargate proxy for standard ERC-20 tokens
 - Token approval tool

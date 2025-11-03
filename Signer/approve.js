@@ -2,7 +2,7 @@
 // Approves ERC-20 tokens for use with MegalithStargate contract
 // Required for standard ERC-20 tokens (not needed for EIP-3009 tokens)
 // Part of the x402 payment protocol implementation
-// Supports BNB Chain Mainnet (56) and Testnet (97)
+// Supports BNB Chain (56, 97) and Base (8453, 84532)
 // https://megalithlabs.ai | https://x402.org
 
 const { ethers } = require('ethers');
@@ -38,6 +38,8 @@ const ERC20_ABI = [
 const RPC_URLS = {
   '56': 'https://bsc-dataseed.binance.org',
   '97': 'https://data-seed-prebsc-1-s1.binance.org:8545',
+  '8453': 'https://mainnet.base.org',
+  '84532': 'https://sepolia.base.org',
 };
 
 // Facilitator API
@@ -114,7 +116,7 @@ async function main() {
   // ============================================
   
   if (!network || !RPC_URLS[network]) {
-    console.error(`${colors.red}✗${colors.reset} Invalid NETWORK in approve.env (use 56 or 97)`);
+    console.error(`${colors.red}✗${colors.reset} Invalid NETWORK in approve.env (use 56, 97, 8453, or 84532)`);
     process.exit(1);
   }
 
@@ -136,7 +138,14 @@ async function main() {
   const wallet = new ethers.Wallet(approverKey, provider);
   const approver = wallet.address;
 
-  console.log(`${colors.blue}Network:${colors.reset} ${network === '56' ? 'BNB Chain Mainnet' : 'BNB Chain Testnet'} (${network})`);
+  const networkNames = {
+    '56': 'BNB Chain Mainnet',
+    '97': 'BNB Chain Testnet',
+    '8453': 'Base Mainnet',
+    '84532': 'Base Sepolia'
+  };
+
+  console.log(`${colors.blue}Network:${colors.reset} ${networkNames[network]} (${network})`);
   console.log(`${colors.blue}Token:${colors.reset} ${tokenAddress}`);
   console.log(`${colors.blue}Approver:${colors.reset} ${approver}\n`);
 

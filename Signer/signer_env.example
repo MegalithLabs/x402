@@ -13,6 +13,8 @@
 # Options:
 #   bsc          = BNB Chain Mainnet (Chain ID: 56)
 #   bsc-testnet  = BNB Chain Testnet (Chain ID: 97)
+#   base         = Base Mainnet (Chain ID: 8453)
+#   base-sepolia = Base Sepolia Testnet (Chain ID: 84532)
 NETWORK=
 
 # PAYER_KEY - Private key of the payment sender
