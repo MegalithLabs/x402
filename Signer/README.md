@@ -351,6 +351,18 @@ curl https://x402.megalithlabs.ai/contracts
     "version": "1.0.0",
     "network": "BNB Chain Testnet",
     "chainId": 97
+  },
+  "base": {
+    "stargate": "0x40200001004B5110333e4De8179426971Efd034A",
+    "version": "1.0.0",
+    "network": "Base Mainnet",
+    "chainId": 8453
+  },
+  "base-sepolia": {
+    "stargate": "0x40200001004B5110333e4De8179426971Efd034A",
+    "version": "1.0.0",
+    "network": "Base Sepolia",
+    "chainId": 84532
   }
 }
 ```
