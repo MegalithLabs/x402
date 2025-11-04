@@ -51,6 +51,8 @@ Enables x402 payments with standard ERC-20 tokens that lack native EIP-3009 supp
 |---------|----------|------------------|
 | **BNB Chain Mainnet** | 56 | `0x40200001004b5110333e4de8179426971efd034a` |
 | **BNB Chain Testnet** | 97 | `0x40200001004b5110333e4de8179426971efd034a` |
+| **Base Mainnet** | 8453 | `0x40200001004b5110333e4de8179426971efd034a` |
+| **Base Sepolia** | 84532 | `0x40200001004b5110333e4de8179426971efd034a` |
 
 **Source:** [Contracts/Stargate.sol](Contracts/Stargate.sol)
 
@@ -78,6 +80,8 @@ Enables x402 payments with standard ERC-20 tokens that lack native EIP-3009 supp
 **Currently supported:**
 - ✅ **BNB Chain Mainnet** (Chain ID: 56)
 - ✅ **BNB Chain Testnet** (Chain ID: 97)
+- ✅ **Base Mainnet** (Chain ID: 8453)
+- ✅ **Base Sepolia** (Chain ID: 84532)
 
 ---
 

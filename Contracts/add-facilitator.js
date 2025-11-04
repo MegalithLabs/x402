@@ -1,4 +1,5 @@
 // Script to call addFacilitator on MegalithStargate contract
+// Version 1.1.0
 // Usage: NETWORK=base-mainnet FACILITATOR=0x... OWNER_KEY=0x... node add-facilitator.js
 
 require('dotenv').config();

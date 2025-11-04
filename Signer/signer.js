@@ -1,4 +1,5 @@
 // Megalith x402 Signer & Payload Creator
+// Version 1.1.0
 // Supports both EIP-3009 and standard ERC-20 tokens
 // Supports BNB Chain (bsc, bsc-testnet) and Base (base, base-sepolia)
 // https://megalithlabs.ai

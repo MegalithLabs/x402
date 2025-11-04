@@ -1,4 +1,5 @@
 // Megalith x402 Token Approval Tool
+// Version 1.1.0
 // Approves ERC-20 tokens for use with MegalithStargate contract
 // Required for standard ERC-20 tokens (not needed for EIP-3009 tokens)
 // Part of the x402 payment protocol implementation
