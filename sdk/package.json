@@ -1,0 +1,51 @@
+{
+  "name": "@megalithlabs/x402-sdk",
+  "version": "0.1.0",
+  "description": "JavaScript SDK for x402 payments - create and settle crypto payments in 3 lines of code",
+  "main": "index.js",
+  "scripts": {
+    "test": "node examples/basic-payment.js",
+    "signer": "node tools/signer.js",
+    "approve": "node tools/approve.js"
+  },
+  "keywords": [
+    "x402",
+    "payments",
+    "crypto",
+    "usdc",
+    "stablecoin",
+    "ethereum",
+    "base",
+    "bnb",
+    "eip-3009",
+    "web3",
+    "ai-payments",
+    "micropayments"
+  ],
+  "author": "Megalith Labs <support@megalithlabs.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MegalithLabs/x402.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://x402.org",
+  "bugs": {
+    "url": "https://github.com/MegalithLabs/x402/issues"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "utils.js",
+    "tools/",
+    "examples/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0"
+  }
+}
