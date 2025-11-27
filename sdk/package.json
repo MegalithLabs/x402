@@ -1,7 +1,7 @@
 {
-  "name": "@megalithlabs/x402-sdk",
+  "name": "@megalithlabs/x402",
   "version": "0.1.0",
-  "description": "JavaScript SDK for x402 payments - create and settle crypto payments in 3 lines of code",
+  "description": "JavaScript SDK for x402 payments - pay and charge for APIs with stablecoins",
   "main": "index.js",
   "scripts": {
     "test": "node examples/basic-payment.js",
@@ -20,7 +20,9 @@
     "eip-3009",
     "web3",
     "ai-payments",
-    "micropayments"
+    "micropayments",
+    "http-402",
+    "ai-agents"
   ],
   "author": "Megalith Labs <support@megalithlabs.ai>",
   "license": "MIT",
@@ -35,7 +37,9 @@
   },
   "files": [
     "index.js",
-    "client.js",
+    "signer.js",
+    "payer.js",
+    "payee.js",
     "utils.js",
     "tools/",
     "examples/",
@@ -45,7 +49,18 @@
     "node": ">=16.0.0"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
     "ethers": "^6.13.0"
+  },
+  "peerDependencies": {
+    "axios": ">=1.0.0",
+    "express": ">=4.0.0",
+    "hono": ">=3.0.0",
+    "next": ">=13.0.0"
+  },
+  "peerDependenciesMeta": {
+    "axios": { "optional": true },
+    "express": { "optional": true },
+    "hono": { "optional": true },
+    "next": { "optional": true }
   }
 }

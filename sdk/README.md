@@ -1,8 +1,8 @@
-# @megalithlabs/x402-sdk
+# @megalithlabs/x402
 
-JavaScript SDK for x402 payments - create and settle crypto payments in 3 lines of code.
+JavaScript SDK for x402 payments. Pay for APIs and charge for APIs with stablecoins.
 
-**Part of the x402 protocol**: An open standard for internet-native payments using HTTP 402 status codes.
+**x402** is an open protocol for internet-native payments using HTTP 402 status codes.
 
 Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.ai)
 
@@ -11,73 +11,157 @@ Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.
 ## Installation
 
 ```bash
-npm install @megalithlabs/x402-sdk
-```
-
-Or install directly from GitHub:
-
-```bash
-npm install github:MegalithLabs/x402
+npm install @megalithlabs/x402
 ```
 
 ---
 
 ## Quick Start
 
+### Paying for APIs (Payer)
+
 ```javascript
-const { X402Client } = require('@megalithlabs/x402-sdk');
+const { createSigner, x402Fetch } = require('@megalithlabs/x402');
 
-// Initialize client
-const client = new X402Client({
-  privateKey: process.env.PRIVATE_KEY,
-  network: 'base'  // or 'bsc', 'base-sepolia', 'bsc-testnet'
+// Create signer with your wallet
+const signer = await createSigner('base', process.env.PRIVATE_KEY);
+
+// Wrap fetch to auto-handle 402 responses
+const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
+
+// Use it like normal fetch - payments happen automatically
+const response = await fetchWithPay('https://api.example.com/premium-data');
+const data = await response.json();
+```
+
+### Charging for APIs (Payee)
+
+```javascript
+const express = require('express');
+const { x402Express } = require('@megalithlabs/x402');
+
+const app = express();
+
+// Add payment requirement to routes
+app.use(x402Express('0xYourWalletAddress', {
+  '/api/premium': { price: '$0.01', network: 'base' }
+}));
+
+app.get('/api/premium', (req, res) => {
+  res.json({ data: 'premium content' });
 });
 
-// Pay in one line
-const result = await client.pay({
-  to: '0xRecipientAddress...',
-  amount: '1.00',
-  token: '0xUSDCAddress...'
-});
-
-console.log('Payment settled:', result.txHash);
+app.listen(3000);
 ```
 
 ---
 
 ## API Reference
 
-### Constructor
+### createSigner(network, privateKey)
+
+Create a signer for x402 payments.
 
 ```javascript
-new X402Client({
-  privateKey,      // Required: Wallet private key
-  network,         // Required: 'bsc', 'bsc-testnet', 'base', 'base-sepolia'
-  facilitatorUrl,  // Optional: Custom facilitator (default: https://x402.megalithlabs.ai)
-  rpcUrl           // Optional: Custom RPC URL
-})
+const signer = await createSigner('base', '0xabc123...');
 ```
 
-### Methods
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `network` | string | `'base'`, `'base-sepolia'`, `'bsc'`, `'bsc-testnet'` |
+| `privateKey` | string | Wallet private key (hex string) |
 
-| Method | Description |
-|--------|-------------|
-| `pay({ to, amount, token })` | Create and settle payment in one call |
-| `createPayment({ to, amount, token })` | Create signed payload without settling |
-| `settlePayment(payload)` | Settle an existing payload |
-| `verifyPayment(payload)` | Verify payload without settling |
-| `getAddress()` | Get wallet address |
-| `getNetworkInfo()` | Get current network details |
-| `getSupported()` | Get supported networks from facilitator |
+---
 
-### Payment Options
+### x402Fetch(fetch, signer, options)
+
+Wrap fetch to automatically handle 402 Payment Required responses.
 
 ```javascript
-{
-  to: '0x...',      // Recipient address
-  amount: '1.50',   // Amount as decimal string
-  token: '0x...'    // Token contract address
-}
+const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
+const response = await fetchWithPay('https://api.example.com/data');
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `maxAmount` | string | `'0.10'` | Maximum payment per request (e.g., `'0.50'`) |
+| `facilitator` | string | Megalith | Custom facilitator URL |
+
+---
+
+### x402Axios(axiosInstance, signer, options)
+
+Wrap axios to automatically handle 402 Payment Required responses.
+
+```javascript
+const axios = require('axios');
+const axiosWithPay = x402Axios(axios.create(), signer, { maxAmount: '0.50' });
+const response = await axiosWithPay.get('https://api.example.com/data');
+```
+
+Same options as `x402Fetch`.
+
+---
+
+### x402Express(payTo, routes, options)
+
+Express middleware to require payment for routes.
+
+```javascript
+app.use(x402Express('0xYourAddress', {
+  '/api/premium': { price: '$0.01', network: 'base' },
+  '/api/expensive': { price: '$1.00', network: 'base' }
+}));
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `payTo` | string | Address to receive payments |
+| `routes` | object | Route → config mapping |
+| `options.facilitator` | string | Custom facilitator URL |
+
+**Route config:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `price` | string | Price in dollars (e.g., `'$0.01'`) |
+| `network` | string | Blockchain network |
+| `asset` | string | Token address (default: USDC) |
+| `description` | string | Human-readable description |
+
+---
+
+### x402Hono(payTo, routes, options)
+
+Hono middleware to require payment for routes.
+
+```javascript
+const { Hono } = require('hono');
+const app = new Hono();
+
+app.use('*', x402Hono('0xYourAddress', {
+  '/api/premium': { price: '$0.01', network: 'base' }
+}));
+```
+
+Same parameters as `x402Express`.
+
+---
+
+### x402Next(handler, config, options)
+
+Wrap Next.js API route handlers with payment requirement.
+
+```javascript
+// pages/api/premium.js
+const { x402Next } = require('@megalithlabs/x402');
+
+export default x402Next(
+  async (req, res) => {
+    res.json({ data: 'premium content' });
+  },
+  { payTo: '0xYourAddress', price: '$0.01', network: 'base' }
+);
 ```
 
 ---
@@ -93,63 +177,29 @@ new X402Client({
 
 ---
 
-## Token Support
+## How It Works
 
-### EIP-3009 Tokens (Direct Authorization)
-- **USDC** - No approval needed
-- **EURC** - No approval needed
+### Payer Flow
 
-### Standard ERC-20 Tokens (via Stargate)
-- **USDT**, **DAI**, **BUSD**, and any ERC-20
-- Requires one-time approval: `npm run approve` in `tools/`
+1. Your code calls `fetchWithPay('https://api.example.com/data')`
+2. API returns `402 Payment Required` with payment requirements
+3. SDK reads requirements, signs payment with your wallet
+4. SDK retries request with `X-PAYMENT` header
+5. API verifies payment, returns data
 
----
+### Payee Flow
 
-## Advanced Usage
-
-### Create Payment Without Settling
-
-```javascript
-// Create signed payload
-const payload = await client.createPayment({
-  to: '0x...',
-  amount: '5.00',
-  token: '0x...'
-});
-
-// Verify it's valid
-const verification = await client.verifyPayment(payload);
-console.log('Valid:', verification.valid);
-
-// Settle when ready
-const result = await client.settlePayment(payload);
-```
-
-### Custom RPC URL
-
-```javascript
-const client = new X402Client({
-  privateKey: '0x...',
-  network: 'base',
-  rpcUrl: 'https://your-custom-rpc.com'
-});
-```
-
-### Custom Facilitator
-
-```javascript
-const client = new X402Client({
-  privateKey: '0x...',
-  network: 'base',
-  facilitatorUrl: 'https://your-facilitator.com'
-});
-```
+1. Request arrives at your Express/Hono/Next server
+2. Middleware checks if route requires payment
+3. No `X-PAYMENT` header? Return 402 with requirements
+4. Has payment? Verify and settle via facilitator
+5. Payment confirmed? Continue to your route handler
 
 ---
 
 ## CLI Tools
 
-The SDK includes command-line tools in the `tools/` directory:
+The SDK includes command-line tools for testing:
 
 ```bash
 # Create payment authorization (interactive)
@@ -159,42 +209,7 @@ npm run signer
 npm run approve
 ```
 
-See `tools/README.md` for detailed CLI documentation.
-
----
-
-## Examples
-
-See the `examples/` directory for complete examples:
-
-- `basic-payment.js` - Simple payment flow
-
----
-
-## How It Works
-
-1. **Token Detection**: SDK automatically detects if token supports EIP-3009
-2. **Signature Creation**: Creates EIP-712 typed signature for authorization
-3. **Facilitator Settlement**: Sends to facilitator API which executes on-chain
-4. **Gas Fees**: Facilitator pays gas - you only pay the token amount
-
----
-
-## Error Handling
-
-```javascript
-try {
-  const result = await client.pay({ to, amount, token });
-} catch (error) {
-  if (error.message.includes('Insufficient balance')) {
-    // Handle low balance
-  } else if (error.message.includes('Insufficient Stargate approval')) {
-    // Need to run: npm run approve
-  } else {
-    // Other error
-  }
-}
-```
+See `tools/README.md` for details.
 
 ---
 
@@ -209,4 +224,4 @@ try {
 
 ## License
 
-MIT License - see [LICENSE](../LICENSE)
+MIT License

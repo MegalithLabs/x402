@@ -1,11 +1,27 @@
-// Megalith x402 SDK
+// Megalith x402
+// JavaScript SDK for x402 payments
 // https://megalithlabs.ai | https://x402.org
 
-const { X402Client } = require('./client');
-const { NETWORK_CONFIG, DEFAULT_FACILITATOR_URL } = require('./utils');
+// Signer
+const { createSigner, NETWORKS } = require('./signer');
+
+// Payer functions (for paying for APIs)
+const { x402Fetch, x402Axios } = require('./payer');
+
+// Payee middleware (for charging for APIs)
+const { x402Express, x402Hono, x402Next } = require('./payee');
 
 module.exports = {
-  X402Client,
-  NETWORK_CONFIG,
-  DEFAULT_FACILITATOR_URL
+  // Signer
+  createSigner,
+  NETWORKS,
+
+  // Payer
+  x402Fetch,
+  x402Axios,
+
+  // Payee
+  x402Express,
+  x402Hono,
+  x402Next
 };

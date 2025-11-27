@@ -1,66 +1,65 @@
 // Basic x402 Payment Example
-// Run: node examples/basic-payment.js
+// Demonstrates using x402Fetch to pay for an API
 
 require('dotenv').config();
-const { X402Client } = require('../');
+const { createSigner, x402Fetch } = require('../');
 
-// Configuration from environment variables
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const NETWORK = process.env.NETWORK || 'base-sepolia';
-const RECIPIENT = process.env.RECIPIENT;
-const TOKEN = process.env.TOKEN;
-const AMOUNT = process.env.AMOUNT || '1.00';
+const API_URL = process.env.API_URL || 'https://api.example.com/premium';
+const MAX_AMOUNT = process.env.MAX_AMOUNT || '0.10';
 
 async function main() {
-  // Validate configuration
-  if (!PRIVATE_KEY || !RECIPIENT || !TOKEN) {
-    console.error('Missing configuration. Set environment variables:');
-    console.error('  PRIVATE_KEY - Your wallet private key');
-    console.error('  RECIPIENT   - Payment recipient address');
-    console.error('  TOKEN       - Token contract address');
-    console.error('  NETWORK     - Network (default: base-sepolia)');
-    console.error('  AMOUNT      - Amount to send (default: 1.00)');
+  if (!PRIVATE_KEY) {
+    console.error('Missing PRIVATE_KEY environment variable');
+    console.error('');
+    console.error('Create a .env file with:');
+    console.error('  PRIVATE_KEY=0x...');
+    console.error('  NETWORK=base-sepolia');
+    console.error('  API_URL=https://some-api.com/paid-endpoint');
+    console.error('  MAX_AMOUNT=0.10');
     process.exit(1);
   }
 
-  // Initialize client
-  const client = new X402Client({
-    privateKey: PRIVATE_KEY,
-    network: NETWORK
-  });
-
   console.log('=== x402 Payment Example ===\n');
-  console.log('Network:', client.getNetworkInfo().name);
-  console.log('From:', client.getAddress());
-  console.log('To:', RECIPIENT);
-  console.log('Token:', TOKEN);
-  console.log('Amount:', AMOUNT);
+
+  // Step 1: Create signer
+  console.log('Creating signer...');
+  const signer = await createSigner(NETWORK, PRIVATE_KEY);
+  console.log('  Network:', signer.getNetwork().displayName);
+  console.log('  Address:', signer.getAddress());
+  console.log('');
+
+  // Step 2: Wrap fetch with payment capability
+  console.log('Wrapping fetch with x402...');
+  const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: MAX_AMOUNT });
+  console.log('  Max amount per request: $' + MAX_AMOUNT);
+  console.log('');
+
+  // Step 3: Make request (payment happens automatically if needed)
+  console.log('Fetching:', API_URL);
   console.log('');
 
   try {
-    // Option 1: Create and settle in one call
-    console.log('Creating and settling payment...\n');
-    const result = await client.pay({
-      to: RECIPIENT,
-      amount: AMOUNT,
-      token: TOKEN
-    });
+    const response = await fetchWithPay(API_URL);
 
-    console.log('Payment successful!');
-    console.log('Transaction hash:', result.txHash);
-    console.log('Block number:', result.blockNumber);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Success! Response:');
+      console.log(JSON.stringify(data, null, 2));
 
-  } catch (error) {
-    console.error('Payment failed:', error.message);
-
-    // Helpful error messages
-    if (error.message.includes('Insufficient balance')) {
-      console.error('\nYou need more tokens in your wallet.');
-    } else if (error.message.includes('Insufficient Stargate approval')) {
-      console.error('\nFor ERC-20 tokens, run: npm run approve');
+      // Check if payment was made
+      const paymentResponse = response.headers.get('x-payment-response');
+      if (paymentResponse) {
+        const payment = JSON.parse(Buffer.from(paymentResponse, 'base64').toString());
+        console.log('\nPayment settled:');
+        console.log('  TX Hash:', payment.txHash);
+      }
+    } else {
+      console.log('Request failed:', response.status, response.statusText);
     }
-
-    process.exit(1);
+  } catch (error) {
+    console.error('Error:', error.message);
   }
 }
 
