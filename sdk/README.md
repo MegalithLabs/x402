@@ -42,9 +42,16 @@ const { x402Express } = require('@megalithlabs/x402');
 
 const app = express();
 
+// USDC on Base
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
 // Add payment requirement to routes
 app.use(x402Express('0xYourWalletAddress', {
-  '/api/premium': { price: '$0.01', network: 'base' }
+  '/api/premium': {
+    amount: '0.01',      // 0.01 USDC (human-readable)
+    asset: USDC,         // Token address
+    network: 'base'      // Network
+  }
 }));
 
 app.get('/api/premium', (req, res) => {
@@ -108,9 +115,11 @@ Same options as `x402Fetch`.
 Express middleware to require payment for routes.
 
 ```javascript
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
 app.use(x402Express('0xYourAddress', {
-  '/api/premium': { price: '$0.01', network: 'base' },
-  '/api/expensive': { price: '$1.00', network: 'base' }
+  '/api/premium': { amount: '0.01', asset: USDC, network: 'base' },
+  '/api/expensive': { amount: '1.00', asset: USDC, network: 'base' }
 }));
 ```
 
@@ -122,12 +131,14 @@ app.use(x402Express('0xYourAddress', {
 
 **Route config:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `price` | string | Price in dollars (e.g., `'$0.01'`) |
-| `network` | string | Blockchain network |
-| `asset` | string | Token address (default: USDC) |
-| `description` | string | Human-readable description |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `amount` | string | Yes | Amount in tokens (e.g., `'0.01'`) - human-readable |
+| `asset` | string | Yes | Token contract address |
+| `network` | string | Yes | Blockchain network |
+| `description` | string | No | Human-readable description |
+
+The SDK automatically fetches the token's decimals from the blockchain to convert your human-readable amount to atomic units.
 
 ---
 
@@ -137,10 +148,13 @@ Hono middleware to require payment for routes.
 
 ```javascript
 const { Hono } = require('hono');
+const { x402Hono } = require('@megalithlabs/x402');
+
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const app = new Hono();
 
 app.use('*', x402Hono('0xYourAddress', {
-  '/api/premium': { price: '$0.01', network: 'base' }
+  '/api/premium': { amount: '0.01', asset: USDC, network: 'base' }
 }));
 ```
 
@@ -156,11 +170,18 @@ Wrap Next.js API route handlers with payment requirement.
 // pages/api/premium.js
 const { x402Next } = require('@megalithlabs/x402');
 
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
 export default x402Next(
   async (req, res) => {
     res.json({ data: 'premium content' });
   },
-  { payTo: '0xYourAddress', price: '$0.01', network: 'base' }
+  {
+    payTo: '0xYourAddress',
+    amount: '0.01',
+    asset: USDC,
+    network: 'base'
+  }
 );
 ```
 

@@ -7,11 +7,61 @@ const { ethers } = require('ethers');
 // Default facilitator
 const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
 
+// Network RPC URLs for fetching token decimals
+const NETWORK_RPC = {
+  'base': 'https://mainnet.base.org/',
+  'base-sepolia': 'https://sepolia.base.org/',
+  'bsc': 'https://bsc-dataseed.binance.org/',
+  'bsc-testnet': 'https://data-seed-prebsc-1-s1.binance.org:8545/'
+};
+
+// Token ABI for decimals
+const TOKEN_ABI = ['function decimals() view returns (uint8)'];
+
+// Cache for token decimals
+const decimalsCache = {};
+
+/**
+ * Fetch token decimals from blockchain (with caching)
+ * @private
+ */
+async function getTokenDecimals(asset, network) {
+  const cacheKey = `${network}:${asset}`;
+  if (decimalsCache[cacheKey] !== undefined) {
+    return decimalsCache[cacheKey];
+  }
+
+  const rpcUrl = NETWORK_RPC[network];
+  if (!rpcUrl) {
+    throw new Error(`Unknown network: ${network}`);
+  }
+
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const token = new ethers.Contract(asset, TOKEN_ABI, provider);
+
+  try {
+    const decimals = await token.decimals();
+    decimalsCache[cacheKey] = Number(decimals);
+    return decimalsCache[cacheKey];
+  } catch (error) {
+    throw new Error(`Failed to fetch decimals for token ${asset}: ${error.message}`);
+  }
+}
+
+/**
+ * Convert human-readable amount to atomic units
+ * @private
+ */
+async function toAtomicUnits(amount, asset, network) {
+  const decimals = await getTokenDecimals(asset, network);
+  return ethers.parseUnits(amount.toString(), decimals).toString();
+}
+
 /**
  * Express middleware to require x402 payment for routes
  *
  * @param {string} payTo - Address to receive payments
- * @param {Object} routes - Route configuration { '/path': { price: '$0.01', network: 'base', asset: '0x...' } }
+ * @param {Object} routes - Route configuration { '/path': { amount: '0.01', asset: '0x...', network: 'base' } }
  * @param {Object} options - Options
  * @param {string} options.facilitator - Custom facilitator URL
  * @returns {Function} Express middleware
@@ -19,7 +69,11 @@ const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
  * @example
  * const app = express();
  * app.use(x402Express('0xYourAddress', {
- *   '/api/premium': { price: '$0.01', network: 'base' }
+ *   '/api/premium': {
+ *     amount: '0.01',           // 0.01 tokens (human-readable)
+ *     asset: '0x833589...',     // USDC on Base
+ *     network: 'base'
+ *   }
  * }));
  */
 function x402Express(payTo, routes, options = {}) {
@@ -39,9 +93,12 @@ function x402Express(payTo, routes, options = {}) {
     const paymentHeader = req.headers['x-payment'];
     if (!paymentHeader) {
       // Return 402 with payment requirements
-      return res.status(402).json({
-        paymentRequirements: buildPaymentRequirements(payTo, config, req.path)
-      });
+      try {
+        const requirements = await buildPaymentRequirements(payTo, config, req.path);
+        return res.status(402).json({ paymentRequirements: requirements });
+      } catch (error) {
+        return res.status(500).json({ error: error.message });
+      }
     }
 
     // Verify and settle payment
@@ -55,10 +112,15 @@ function x402Express(payTo, routes, options = {}) {
       // Continue to route handler
       next();
     } catch (error) {
-      return res.status(402).json({
-        error: error.message,
-        paymentRequirements: buildPaymentRequirements(payTo, config, req.path)
-      });
+      try {
+        const requirements = await buildPaymentRequirements(payTo, config, req.path);
+        return res.status(402).json({
+          error: error.message,
+          paymentRequirements: requirements
+        });
+      } catch (reqError) {
+        return res.status(500).json({ error: reqError.message });
+      }
     }
   };
 }
@@ -74,7 +136,7 @@ function x402Express(payTo, routes, options = {}) {
  * @example
  * const app = new Hono();
  * app.use('*', x402Hono('0xYourAddress', {
- *   '/api/premium': { price: '$0.01', network: 'base' }
+ *   '/api/premium': { amount: '0.01', asset: '0x...', network: 'base' }
  * }));
  */
 function x402Hono(payTo, routes, options = {}) {
@@ -93,9 +155,12 @@ function x402Hono(payTo, routes, options = {}) {
     // Check for payment header
     const paymentHeader = c.req.header('x-payment');
     if (!paymentHeader) {
-      return c.json({
-        paymentRequirements: buildPaymentRequirements(payTo, config, c.req.path)
-      }, 402);
+      try {
+        const requirements = await buildPaymentRequirements(payTo, config, c.req.path);
+        return c.json({ paymentRequirements: requirements }, 402);
+      } catch (error) {
+        return c.json({ error: error.message }, 500);
+      }
     }
 
     // Verify and settle payment
@@ -107,10 +172,15 @@ function x402Hono(payTo, routes, options = {}) {
 
       await next();
     } catch (error) {
-      return c.json({
-        error: error.message,
-        paymentRequirements: buildPaymentRequirements(payTo, config, c.req.path)
-      }, 402);
+      try {
+        const requirements = await buildPaymentRequirements(payTo, config, c.req.path);
+        return c.json({
+          error: error.message,
+          paymentRequirements: requirements
+        }, 402);
+      } catch (reqError) {
+        return c.json({ error: reqError.message }, 500);
+      }
     }
   };
 }
@@ -119,7 +189,7 @@ function x402Hono(payTo, routes, options = {}) {
  * Next.js middleware/wrapper to require x402 payment for API routes
  *
  * @param {Function} handler - Next.js API route handler
- * @param {Object} config - Payment configuration { payTo, price, network, asset }
+ * @param {Object} config - Payment configuration { payTo, amount, asset, network }
  * @param {Object} options - Options
  * @returns {Function} Wrapped handler
  *
@@ -128,7 +198,12 @@ function x402Hono(payTo, routes, options = {}) {
  *   async (req, res) => {
  *     res.json({ data: 'premium content' });
  *   },
- *   { payTo: '0xYourAddress', price: '$0.01', network: 'base' }
+ *   {
+ *     payTo: '0xYourAddress',
+ *     amount: '0.01',
+ *     asset: '0x833589...',
+ *     network: 'base'
+ *   }
  * );
  */
 function x402Next(handler, config, options = {}) {
@@ -138,9 +213,12 @@ function x402Next(handler, config, options = {}) {
     // Check for payment header
     const paymentHeader = req.headers['x-payment'];
     if (!paymentHeader) {
-      return res.status(402).json({
-        paymentRequirements: buildPaymentRequirements(config.payTo, config, req.url)
-      });
+      try {
+        const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
+        return res.status(402).json({ paymentRequirements: requirements });
+      } catch (error) {
+        return res.status(500).json({ error: error.message });
+      }
     }
 
     // Verify and settle payment
@@ -153,10 +231,15 @@ function x402Next(handler, config, options = {}) {
       // Call original handler
       return await handler(req, res);
     } catch (error) {
-      return res.status(402).json({
-        error: error.message,
-        paymentRequirements: buildPaymentRequirements(config.payTo, config, req.url)
-      });
+      try {
+        const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
+        return res.status(402).json({
+          error: error.message,
+          paymentRequirements: requirements
+        });
+      } catch (reqError) {
+        return res.status(500).json({ error: reqError.message });
+      }
     }
   };
 }
@@ -165,42 +248,32 @@ function x402Next(handler, config, options = {}) {
  * Build payment requirements object
  * @private
  */
-function buildPaymentRequirements(payTo, config, resource) {
-  // Parse price string like '$0.01' to atomic units
-  const priceStr = config.price || '$0.01';
-  const priceNum = parseFloat(priceStr.replace('$', ''));
-  const decimals = config.decimals || 6; // USDC default
-  const maxAmountRequired = Math.floor(priceNum * Math.pow(10, decimals)).toString();
+async function buildPaymentRequirements(payTo, config, resource) {
+  // Validate required fields
+  if (!config.amount) {
+    throw new Error('amount is required in route config');
+  }
+  if (!config.asset) {
+    throw new Error('asset (token address) is required in route config');
+  }
+  if (!config.network) {
+    throw new Error('network is required in route config');
+  }
 
-  // Default to USDC on Base if not specified
-  const network = config.network || 'base';
-  const asset = config.asset || getDefaultAsset(network);
+  // Convert human-readable amount to atomic units
+  const maxAmountRequired = await toAtomicUnits(config.amount, config.asset, config.network);
 
   return {
     scheme: 'exact',
-    network,
+    network: config.network,
     maxAmountRequired,
     resource,
-    description: config.description || `Payment required for ${resource}`,
+    description: config.description || `Payment of ${config.amount} tokens for ${resource}`,
     mimeType: 'application/json',
     payTo,
     maxTimeoutSeconds: 30,
-    asset
+    asset: config.asset
   };
-}
-
-/**
- * Get default USDC address for network
- * @private
- */
-function getDefaultAsset(network) {
-  const assets = {
-    'base': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-    'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
-    'bsc': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // USDC on BSC
-    'bsc-testnet': '0x64544969ed7EBf5f083679233325356EbE738930' // Test USDC on BSC Testnet
-  };
-  return assets[network] || assets['base'];
 }
 
 /**
@@ -234,14 +307,16 @@ function findMatchingRoute(path, routePatterns) {
  */
 async function settlePayment(payment, config, facilitator) {
   // Build full payload for facilitator
+  const maxAmountRequired = await toAtomicUnits(config.amount, config.asset, config.network);
+
   const payload = {
     x402Version: 1,
     paymentPayload: payment,
     paymentRequirements: {
       scheme: 'exact',
       network: payment.network || config.network,
-      maxAmountRequired: config.maxAmountRequired || '0',
-      asset: config.asset || getDefaultAsset(config.network)
+      maxAmountRequired,
+      asset: config.asset
     }
   };
 
