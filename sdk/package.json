@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "JavaScript SDK for x402 payments - pay and charge for APIs with stablecoins",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "test": "node examples/basic-payment.js",
     "signer": "node tools/signer.js",
@@ -37,10 +38,10 @@
   },
   "files": [
     "index.js",
+    "index.d.ts",
     "signer.js",
     "payer.js",
     "payee.js",
-    "utils.js",
     "tools/",
     "examples/",
     "README.md"
