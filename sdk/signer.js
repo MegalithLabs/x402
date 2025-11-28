@@ -99,6 +99,7 @@ async function createSignerFromViemClient(walletClient) {
 
   const account = walletClient.account;
   const chain = walletClient.chain;
+  const transport = walletClient.transport;
 
   if (!account) {
     throw new Error('WalletClient must have an account configured');
@@ -110,10 +111,11 @@ async function createSignerFromViemClient(walletClient) {
   // Map viem chain to our network name
   const networkName = getNetworkNameFromChainId(chain.id);
 
-  // Create public client for read operations
+  // Create public client for read operations, using same transport as wallet client
+  // This ensures we use the same RPC endpoint for consistency
   const publicClient = createPublicClient({
     chain,
-    transport: http()
+    transport: transport || http()
   });
 
   return {

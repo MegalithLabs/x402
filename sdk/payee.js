@@ -7,13 +7,35 @@ const { ethers } = require('ethers');
 // Default facilitator
 const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
 
-// Network RPC URLs for fetching token decimals
+// Network RPC URLs for fetching token decimals (with env var overrides)
 const NETWORK_RPC = {
-  'base': 'https://mainnet.base.org/',
-  'base-sepolia': 'https://sepolia.base.org/',
-  'bsc': 'https://bsc-dataseed.binance.org/',
-  'bsc-testnet': 'https://data-seed-prebsc-1-s1.binance.org:8545/'
+  'base': process.env.RPC_BASE || 'https://mainnet.base.org/',
+  'base-sepolia': process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/',
+  'bsc': process.env.RPC_BSC || 'https://bsc-dataseed.binance.org/',
+  'bsc-testnet': process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
 };
+
+/**
+ * Cross-platform base64 encode (works in Node.js and browsers)
+ * @private
+ */
+function base64Encode(str) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(str).toString('base64');
+  }
+  return btoa(str);
+}
+
+/**
+ * Cross-platform base64 decode (works in Node.js and browsers)
+ * @private
+ */
+function base64Decode(str) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(str, 'base64').toString();
+  }
+  return atob(str);
+}
 
 // Token ABI for decimals
 const TOKEN_ABI = ['function decimals() view returns (uint8)'];
@@ -103,11 +125,11 @@ function x402Express(payTo, routes, options = {}) {
 
     // Verify and settle payment
     try {
-      const payment = JSON.parse(Buffer.from(paymentHeader, 'base64').toString());
+      const payment = JSON.parse(base64Decode(paymentHeader));
       const result = await settlePayment(payment, config, facilitator);
 
       // Add payment response header
-      res.setHeader('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify(result)).toString('base64'));
+      res.setHeader('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
 
       // Continue to route handler
       next();
@@ -165,10 +187,10 @@ function x402Hono(payTo, routes, options = {}) {
 
     // Verify and settle payment
     try {
-      const payment = JSON.parse(Buffer.from(paymentHeader, 'base64').toString());
+      const payment = JSON.parse(base64Decode(paymentHeader));
       const result = await settlePayment(payment, config, facilitator);
 
-      c.header('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify(result)).toString('base64'));
+      c.header('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
 
       await next();
     } catch (error) {
@@ -186,62 +208,134 @@ function x402Hono(payTo, routes, options = {}) {
 }
 
 /**
- * Next.js middleware/wrapper to require x402 payment for API routes
+ * Next.js wrapper to require x402 payment for API routes
+ * Supports both App Router (Next.js 13+) and Pages Router
  *
  * @param {Function} handler - Next.js API route handler
  * @param {Object} config - Payment configuration { payTo, amount, asset, network }
  * @param {Object} options - Options
  * @returns {Function} Wrapped handler
  *
- * @example
+ * @example App Router (Next.js 13+)
+ * // app/api/premium/route.js
+ * import { x402Next } from '@megalithlabs/x402';
+ *
+ * async function handler(req) {
+ *   return Response.json({ data: 'premium content' });
+ * }
+ *
+ * export const GET = x402Next(handler, {
+ *   payTo: '0xYourAddress',
+ *   amount: '0.01',
+ *   asset: '0x833589...',
+ *   network: 'base'
+ * });
+ *
+ * @example Pages Router (legacy)
+ * // pages/api/premium.js
  * export default x402Next(
  *   async (req, res) => {
  *     res.json({ data: 'premium content' });
  *   },
- *   {
- *     payTo: '0xYourAddress',
- *     amount: '0.01',
- *     asset: '0x833589...',
- *     network: 'base'
- *   }
+ *   { payTo: '0x...', amount: '0.01', asset: '0x...', network: 'base' }
  * );
  */
 function x402Next(handler, config, options = {}) {
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
 
-  return async function wrappedHandler(req, res) {
-    // Check for payment header
-    const paymentHeader = req.headers['x-payment'];
-    if (!paymentHeader) {
-      try {
-        const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
-        return res.status(402).json({ paymentRequirements: requirements });
-      } catch (error) {
-        return res.status(500).json({ error: error.message });
-      }
-    }
+  return async function wrappedHandler(req, resOrContext) {
+    // Detect if App Router (req is Request object) or Pages Router (req has headers object)
+    const isAppRouter = req instanceof Request || (req.constructor && req.constructor.name === 'Request');
 
-    // Verify and settle payment
-    try {
-      const payment = JSON.parse(Buffer.from(paymentHeader, 'base64').toString());
-      const result = await settlePayment(payment, config, facilitator);
-
-      res.setHeader('X-PAYMENT-RESPONSE', Buffer.from(JSON.stringify(result)).toString('base64'));
-
-      // Call original handler
-      return await handler(req, res);
-    } catch (error) {
-      try {
-        const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
-        return res.status(402).json({
-          error: error.message,
-          paymentRequirements: requirements
-        });
-      } catch (reqError) {
-        return res.status(500).json({ error: reqError.message });
-      }
+    if (isAppRouter) {
+      return handleAppRouter(req, handler, config, facilitator);
+    } else {
+      return handlePagesRouter(req, resOrContext, handler, config, facilitator);
     }
   };
+}
+
+/**
+ * Handle App Router (Next.js 13+) requests
+ * @private
+ */
+async function handleAppRouter(req, handler, config, facilitator) {
+  const paymentHeader = req.headers.get('x-payment');
+
+  if (!paymentHeader) {
+    try {
+      const url = new URL(req.url);
+      const requirements = await buildPaymentRequirements(config.payTo, config, url.pathname);
+      return Response.json({ paymentRequirements: requirements }, { status: 402 });
+    } catch (error) {
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+  }
+
+  try {
+    const payment = JSON.parse(base64Decode(paymentHeader));
+    const result = await settlePayment(payment, config, facilitator);
+
+    // Call original handler and add payment response header
+    const response = await handler(req);
+
+    // Clone response to add header
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: newHeaders
+    });
+  } catch (error) {
+    try {
+      const url = new URL(req.url);
+      const requirements = await buildPaymentRequirements(config.payTo, config, url.pathname);
+      return Response.json({
+        error: error.message,
+        paymentRequirements: requirements
+      }, { status: 402 });
+    } catch (reqError) {
+      return Response.json({ error: reqError.message }, { status: 500 });
+    }
+  }
+}
+
+/**
+ * Handle Pages Router (legacy) requests
+ * @private
+ */
+async function handlePagesRouter(req, res, handler, config, facilitator) {
+  const paymentHeader = req.headers['x-payment'];
+
+  if (!paymentHeader) {
+    try {
+      const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
+      return res.status(402).json({ paymentRequirements: requirements });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  try {
+    const payment = JSON.parse(base64Decode(paymentHeader));
+    const result = await settlePayment(payment, config, facilitator);
+
+    res.setHeader('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
+
+    return await handler(req, res);
+  } catch (error) {
+    try {
+      const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
+      return res.status(402).json({
+        error: error.message,
+        paymentRequirements: requirements
+      });
+    } catch (reqError) {
+      return res.status(500).json({ error: reqError.message });
+    }
+  }
 }
 
 /**

@@ -8,6 +8,28 @@ const { ethers } = require('ethers');
 // Default facilitator
 const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
 
+/**
+ * Cross-platform base64 encode (works in Node.js and browsers)
+ * @private
+ */
+function base64Encode(str) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(str).toString('base64');
+  }
+  return btoa(str);
+}
+
+/**
+ * Cross-platform base64 decode (works in Node.js and browsers)
+ * @private
+ */
+function base64Decode(str) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(str, 'base64').toString();
+  }
+  return atob(str);
+}
+
 // Token ABI for getting details (ethers format)
 const TOKEN_ABI = [
   'function name() view returns (string)',
@@ -116,7 +138,7 @@ function x402Fetch(fetch, signer, options = {}) {
     const payment = await createPayment(signer, requirements, facilitator);
 
     // Retry with payment header
-    const paymentHeader = Buffer.from(JSON.stringify(payment)).toString('base64');
+    const paymentHeader = base64Encode(JSON.stringify(payment));
     const newInit = {
       ...init,
       headers: {
@@ -169,7 +191,7 @@ function x402Axios(axiosInstance, signer, options = {}) {
       const payment = await createPayment(signer, requirements, facilitator);
 
       // Retry with payment header
-      const paymentHeader = Buffer.from(JSON.stringify(payment)).toString('base64');
+      const paymentHeader = base64Encode(JSON.stringify(payment));
       const config = error.config;
       config.headers['X-PAYMENT'] = paymentHeader;
 

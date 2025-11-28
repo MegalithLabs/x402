@@ -132,6 +132,11 @@ export interface RouteConfig {
   description?: string;
 }
 
+export interface NextRouteConfig extends RouteConfig {
+  /** Address to receive payments (required for Next.js) */
+  payTo: string;
+}
+
 export interface PayeeOptions {
   /** Custom facilitator URL */
   facilitator?: string;
@@ -167,14 +172,20 @@ export function x402Hono(
 
 /**
  * Next.js wrapper for x402 payments
+ * Supports both App Router (Next.js 13+) and Pages Router
  *
- * @example
+ * @example App Router
  * export const GET = x402Next(handler, {
- *   amount: '0.001', asset: '0x...', network: 'base'
+ *   payTo: '0xYourWallet', amount: '0.001', asset: '0x...', network: 'base'
+ * });
+ *
+ * @example Pages Router
+ * export default x402Next(handler, {
+ *   payTo: '0xYourWallet', amount: '0.001', asset: '0x...', network: 'base'
  * });
  */
 export function x402Next(
-  handler: (req: any) => Promise<any>,
-  config: RouteConfig,
+  handler: (req: any, res?: any) => Promise<any>,
+  config: NextRouteConfig,
   options?: PayeeOptions
-): (req: any) => Promise<any>;
+): (req: any, res?: any) => Promise<any>;
