@@ -289,17 +289,20 @@ export default x402Next(
 
 ## CLI Tools
 
-The SDK includes command-line tools for testing:
+For manual testing and learning, standalone CLI tools are available in the [x402 repository](https://github.com/MegalithLabs/x402):
 
 ```bash
+git clone https://github.com/MegalithLabs/x402.git
+cd x402/tools
+
 # Create payment authorization (interactive)
-npm run signer
+node signer.js
 
 # Approve Stargate for ERC-20 tokens
-npm run approve
+node approve.js
 ```
 
-See `tools/README.md` for details.
+See `/tools/README.md` in the repository for details.
 
 ---
 
