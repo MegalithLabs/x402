@@ -1,5 +1,6 @@
 // Megalith x402 - Signer
 // Creates a wallet signer for x402 payments
+// Supports both simple private key and viem wallet clients
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
@@ -31,14 +32,158 @@ const NETWORKS = {
 /**
  * Create a signer for x402 payments
  *
- * @param {string} network - Network name: 'base', 'base-sepolia', 'bsc', 'bsc-testnet'
- * @param {string} privateKey - Wallet private key (hex string starting with 0x)
- * @returns {Promise<Object>} Signer object with signPayment, getAddress, network
+ * Supports two approaches:
+ * 1. Simple: Pass network name + private key
+ * 2. Advanced: Pass a viem WalletClient (for hardware wallets, WalletConnect, etc.)
  *
- * @example
+ * @param {string|Object} networkOrWalletClient - Network name OR viem WalletClient
+ * @param {string} [privateKey] - Private key (only if first arg is network name)
+ * @returns {Promise<Object>} Signer object
+ *
+ * @example Simple approach (private key)
  * const signer = await createSigner('base', '0xabc123...');
+ *
+ * @example Advanced approach (viem wallet client)
+ * import { createWalletClient, http } from 'viem';
+ * import { base } from 'viem/chains';
+ * import { privateKeyToAccount } from 'viem/accounts';
+ *
+ * const walletClient = createWalletClient({
+ *   account: privateKeyToAccount('0x...'),
+ *   chain: base,
+ *   transport: http()
+ * });
+ * const signer = await createSigner(walletClient);
  */
-async function createSigner(network, privateKey) {
+async function createSigner(networkOrWalletClient, privateKey) {
+  // Detect if first argument is a viem WalletClient
+  if (isViemWalletClient(networkOrWalletClient)) {
+    return createSignerFromViemClient(networkOrWalletClient);
+  }
+
+  // Otherwise, treat as network + privateKey approach
+  return createSignerFromPrivateKey(networkOrWalletClient, privateKey);
+}
+
+/**
+ * Check if object is a viem WalletClient
+ * @private
+ */
+function isViemWalletClient(obj) {
+  return (
+    obj &&
+    typeof obj === 'object' &&
+    typeof obj.signTypedData === 'function' &&
+    obj.account &&
+    obj.chain
+  );
+}
+
+/**
+ * Create signer from viem WalletClient
+ * @private
+ */
+async function createSignerFromViemClient(walletClient) {
+  const { createPublicClient, http } = require('viem');
+
+  const account = walletClient.account;
+  const chain = walletClient.chain;
+
+  if (!account) {
+    throw new Error('WalletClient must have an account configured');
+  }
+  if (!chain) {
+    throw new Error('WalletClient must have a chain configured');
+  }
+
+  // Map viem chain to our network name
+  const networkName = getNetworkNameFromChainId(chain.id);
+
+  // Create public client for read operations
+  const publicClient = createPublicClient({
+    chain,
+    transport: http()
+  });
+
+  return {
+    /**
+     * Sign an EIP-712 typed data payment
+     */
+    async signTypedData(domain, types, message) {
+      // viem uses slightly different format - needs primaryType
+      const primaryType = Object.keys(types)[0];
+
+      return await walletClient.signTypedData({
+        account,
+        domain,
+        types,
+        primaryType,
+        message
+      });
+    },
+
+    /**
+     * Get the wallet address
+     */
+    getAddress() {
+      return account.address;
+    },
+
+    /**
+     * Get network info
+     */
+    getNetwork() {
+      return {
+        name: networkName,
+        chainId: chain.id,
+        displayName: chain.name
+      };
+    },
+
+    /**
+     * Get the underlying viem wallet client (advanced use)
+     */
+    getWalletClient() {
+      return walletClient;
+    },
+
+    /**
+     * Get the public client for read operations
+     */
+    getPublicClient() {
+      return publicClient;
+    },
+
+    /**
+     * Get a provider-like interface for ethers compatibility
+     */
+    getProvider() {
+      // Return a minimal ethers-compatible provider wrapper
+      return {
+        async call(tx) {
+          return await publicClient.call({
+            to: tx.to,
+            data: tx.data
+          });
+        },
+        getNetwork() {
+          return { chainId: chain.id };
+        }
+      };
+    },
+
+    /**
+     * Indicates this signer uses viem
+     */
+    isViem: true
+  };
+}
+
+/**
+ * Create signer from private key (original simple approach)
+ * @private
+ */
+async function createSignerFromPrivateKey(network, privateKey) {
   if (!network) {
     throw new Error('network is required');
   }
@@ -91,8 +236,26 @@ async function createSigner(network, privateKey) {
      */
     getProvider() {
       return provider;
-    }
+    },
+
+    /**
+     * Indicates this signer uses ethers
+     */
+    isViem: false
   };
+}
+
+/**
+ * Map chain ID to our network name
+ * @private
+ */
+function getNetworkNameFromChainId(chainId) {
+  for (const [name, config] of Object.entries(NETWORKS)) {
+    if (config.chainId === chainId) {
+      return name;
+    }
+  }
+  throw new Error(`Unsupported chain ID: ${chainId}. Supported: ${Object.keys(NETWORKS).join(', ')}`);
 }
 
 module.exports = {

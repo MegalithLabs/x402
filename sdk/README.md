@@ -20,6 +20,8 @@ npm install @megalithlabs/x402
 
 ### Paying for APIs (Payer)
 
+**Simple approach (private key):**
+
 ```javascript
 const { createSigner, x402Fetch } = require('@megalithlabs/x402');
 
@@ -32,6 +34,29 @@ const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
 // Use it like normal fetch - payments happen automatically
 const response = await fetchWithPay('https://api.example.com/premium-data');
 const data = await response.json();
+```
+
+**Advanced approach (viem wallet client):**
+
+```javascript
+const { createSigner, x402Fetch } = require('@megalithlabs/x402');
+const { createWalletClient, http } = require('viem');
+const { base } = require('viem/chains');
+const { privateKeyToAccount } = require('viem/accounts');
+
+// Create viem wallet client (supports hardware wallets, WalletConnect, etc.)
+const walletClient = createWalletClient({
+  account: privateKeyToAccount(process.env.PRIVATE_KEY),
+  chain: base,
+  transport: http()
+});
+
+// Pass the wallet client directly
+const signer = await createSigner(walletClient);
+
+// Same usage from here
+const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
+const response = await fetchWithPay('https://api.example.com/premium-data');
 ```
 
 ### Charging for APIs (Payee)
@@ -65,9 +90,11 @@ app.listen(3000);
 
 ## API Reference
 
-### createSigner(network, privateKey)
+### createSigner(network, privateKey) OR createSigner(walletClient)
 
-Create a signer for x402 payments.
+Create a signer for x402 payments. Supports two approaches:
+
+**Simple approach (private key):**
 
 ```javascript
 const signer = await createSigner('base', '0xabc123...');
@@ -77,6 +104,48 @@ const signer = await createSigner('base', '0xabc123...');
 |-----------|------|-------------|
 | `network` | string | `'base'`, `'base-sepolia'`, `'bsc'`, `'bsc-testnet'` |
 | `privateKey` | string | Wallet private key (hex string) |
+
+**Advanced approach (viem wallet client):**
+
+```javascript
+const { createWalletClient, http } = require('viem');
+const { base } = require('viem/chains');
+const { privateKeyToAccount } = require('viem/accounts');
+
+// With private key
+const walletClient = createWalletClient({
+  account: privateKeyToAccount('0xabc123...'),
+  chain: base,
+  transport: http()
+});
+
+// With hardware wallet (Ledger)
+const walletClient = createWalletClient({
+  account: await ledger.getAccount(),
+  chain: base,
+  transport: http()
+});
+
+// With WalletConnect
+const walletClient = createWalletClient({
+  account: walletConnectAccount,
+  chain: base,
+  transport: http()
+});
+
+const signer = await createSigner(walletClient);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `walletClient` | WalletClient | viem WalletClient with account and chain configured |
+
+The viem approach supports:
+- Hardware wallets (Ledger, Trezor)
+- WalletConnect
+- Smart contract wallets
+- MPC wallets
+- Browser extension wallets
 
 ---
 

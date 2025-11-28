@@ -1,5 +1,6 @@
 // Megalith x402 - Payer Functions
 // Wrap HTTP clients to automatically handle 402 Payment Required responses
+// Supports both ethers and viem signers
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
@@ -7,12 +8,47 @@ const { ethers } = require('ethers');
 // Default facilitator
 const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
 
-// Token ABI for getting details
+// Token ABI for getting details (ethers format)
 const TOKEN_ABI = [
   'function name() view returns (string)',
   'function version() view returns (string)',
   'function decimals() view returns (uint8)',
   'function authorizationState(address, bytes32) view returns (bool)'
+];
+
+// Token ABI for viem
+const VIEM_TOKEN_ABI = [
+  {
+    name: 'name',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'string' }]
+  },
+  {
+    name: 'version',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'string' }]
+  },
+  {
+    name: 'decimals',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'uint8' }]
+  },
+  {
+    name: 'authorizationState',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'authorizer', type: 'address' },
+      { name: 'nonce', type: 'bytes32' }
+    ],
+    outputs: [{ type: 'bool' }]
+  }
 ];
 
 /**
@@ -127,36 +163,24 @@ function x402Axios(axiosInstance, signer, options = {}) {
 async function createPayment(signer, requirements, facilitator) {
   const network = signer.getNetwork();
   const address = signer.getAddress();
-  const provider = signer.getProvider();
 
   const tokenAddress = requirements.asset;
   const payTo = requirements.payTo;
   const value = requirements.maxAmountRequired;
 
-  // Get token details
-  const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
-  let tokenName, tokenVersion;
+  // Get token details - use appropriate method based on signer type
+  let tokenName, tokenVersion, isEIP3009;
 
-  try {
-    tokenName = await token.name();
-  } catch (e) {
-    throw new Error('Failed to get token name');
-  }
-
-  try {
-    tokenVersion = await token.version();
-  } catch (e) {
-    tokenVersion = '1';
-  }
-
-  // Check if EIP-3009 token
-  let isEIP3009 = false;
-  try {
-    const testNonce = ethers.hexlify(ethers.randomBytes(32));
-    await token.authorizationState(address, testNonce);
-    isEIP3009 = true;
-  } catch (e) {
-    isEIP3009 = false;
+  if (signer.isViem) {
+    const result = await getTokenDetailsViem(signer, tokenAddress, address);
+    tokenName = result.tokenName;
+    tokenVersion = result.tokenVersion;
+    isEIP3009 = result.isEIP3009;
+  } else {
+    const result = await getTokenDetailsEthers(signer, tokenAddress, address);
+    tokenName = result.tokenName;
+    tokenVersion = result.tokenVersion;
+    isEIP3009 = result.isEIP3009;
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -167,7 +191,7 @@ async function createPayment(signer, requirements, facilitator) {
 
   if (isEIP3009) {
     // EIP-3009 token (USDC, EURC)
-    const nonce = ethers.hexlify(ethers.randomBytes(32));
+    const nonce = generateRandomBytes32();
 
     const domain = {
       name: tokenName,
@@ -208,10 +232,7 @@ async function createPayment(signer, requirements, facilitator) {
   } else {
     // Standard ERC-20 via Stargate
     const stargateAddress = await fetchStargateAddress(network.name, facilitator);
-
-    const stargateABI = ['function getNonce(address user, address token) view returns (uint256)'];
-    const stargate = new ethers.Contract(stargateAddress, stargateABI, provider);
-    const nonce = await stargate.getNonce(address, tokenAddress);
+    const nonce = await getStargateNonce(signer, stargateAddress, address, tokenAddress);
 
     const domain = {
       name: 'Megalith',
@@ -263,6 +284,132 @@ async function createPayment(signer, requirements, facilitator) {
       authorization
     }
   };
+}
+
+/**
+ * Get token details using ethers provider
+ * @private
+ */
+async function getTokenDetailsEthers(signer, tokenAddress, address) {
+  const provider = signer.getProvider();
+  const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
+
+  let tokenName, tokenVersion;
+
+  try {
+    tokenName = await token.name();
+  } catch (e) {
+    throw new Error('Failed to get token name');
+  }
+
+  try {
+    tokenVersion = await token.version();
+  } catch (e) {
+    tokenVersion = '1';
+  }
+
+  // Check if EIP-3009 token
+  let isEIP3009 = false;
+  try {
+    const testNonce = ethers.hexlify(ethers.randomBytes(32));
+    await token.authorizationState(address, testNonce);
+    isEIP3009 = true;
+  } catch (e) {
+    isEIP3009 = false;
+  }
+
+  return { tokenName, tokenVersion, isEIP3009 };
+}
+
+/**
+ * Get token details using viem public client
+ * @private
+ */
+async function getTokenDetailsViem(signer, tokenAddress, address) {
+  const publicClient = signer.getPublicClient();
+
+  let tokenName, tokenVersion;
+
+  try {
+    tokenName = await publicClient.readContract({
+      address: tokenAddress,
+      abi: VIEM_TOKEN_ABI,
+      functionName: 'name'
+    });
+  } catch (e) {
+    throw new Error('Failed to get token name');
+  }
+
+  try {
+    tokenVersion = await publicClient.readContract({
+      address: tokenAddress,
+      abi: VIEM_TOKEN_ABI,
+      functionName: 'version'
+    });
+  } catch (e) {
+    tokenVersion = '1';
+  }
+
+  // Check if EIP-3009 token
+  let isEIP3009 = false;
+  try {
+    const testNonce = generateRandomBytes32();
+    await publicClient.readContract({
+      address: tokenAddress,
+      abi: VIEM_TOKEN_ABI,
+      functionName: 'authorizationState',
+      args: [address, testNonce]
+    });
+    isEIP3009 = true;
+  } catch (e) {
+    isEIP3009 = false;
+  }
+
+  return { tokenName, tokenVersion, isEIP3009 };
+}
+
+/**
+ * Get Stargate nonce for ERC-20 payments
+ * @private
+ */
+async function getStargateNonce(signer, stargateAddress, userAddress, tokenAddress) {
+  if (signer.isViem) {
+    const publicClient = signer.getPublicClient();
+    return await publicClient.readContract({
+      address: stargateAddress,
+      abi: [{
+        name: 'getNonce',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [
+          { name: 'user', type: 'address' },
+          { name: 'token', type: 'address' }
+        ],
+        outputs: [{ type: 'uint256' }]
+      }],
+      functionName: 'getNonce',
+      args: [userAddress, tokenAddress]
+    });
+  } else {
+    const provider = signer.getProvider();
+    const stargateABI = ['function getNonce(address user, address token) view returns (uint256)'];
+    const stargate = new ethers.Contract(stargateAddress, stargateABI, provider);
+    return await stargate.getNonce(userAddress, tokenAddress);
+  }
+}
+
+/**
+ * Generate random 32 bytes as hex string
+ * @private
+ */
+function generateRandomBytes32() {
+  // Use crypto if available, otherwise ethers
+  try {
+    const crypto = require('crypto');
+    return '0x' + crypto.randomBytes(32).toString('hex');
+  } catch (e) {
+    return ethers.hexlify(ethers.randomBytes(32));
+  }
 }
 
 /**
