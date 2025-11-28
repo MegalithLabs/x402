@@ -6,7 +6,7 @@
 const { createSigner, NETWORKS } = require('./signer');
 
 // Payer functions (for paying for APIs)
-const { x402Fetch, x402Axios } = require('./payer');
+const { x402Fetch, x402Axios, approveToken } = require('./payer');
 
 // Payee middleware (for charging for APIs)
 const { x402Express, x402Hono, x402Next } = require('./payee');
@@ -19,6 +19,7 @@ module.exports = {
   // Payer
   x402Fetch,
   x402Axios,
+  approveToken,
 
   // Payee
   x402Express,

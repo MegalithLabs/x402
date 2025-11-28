@@ -5,27 +5,27 @@
 
 const { ethers } = require('ethers');
 
-// Network configurations
+// Network configurations with env var overrides
 const NETWORKS = {
   'base': {
     name: 'Base Mainnet',
     chainId: 8453,
-    rpcUrl: 'https://mainnet.base.org/'
+    rpcUrl: process.env.RPC_BASE || 'https://mainnet.base.org/'
   },
   'base-sepolia': {
     name: 'Base Sepolia',
     chainId: 84532,
-    rpcUrl: 'https://sepolia.base.org/'
+    rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
   },
   'bsc': {
     name: 'BNB Chain Mainnet',
     chainId: 56,
-    rpcUrl: 'https://bsc-dataseed.binance.org/'
+    rpcUrl: process.env.RPC_BSC || 'https://bsc-dataseed.binance.org/'
   },
   'bsc-testnet': {
     name: 'BNB Chain Testnet',
     chainId: 97,
-    rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/'
+    rpcUrl: process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
   }
 };
 
@@ -33,14 +33,25 @@ const NETWORKS = {
  * Create a signer for x402 payments
  *
  * Supports two approaches:
- * 1. Simple: Pass network name + private key
+ * 1. Simple: Pass network name + private key (+ optional options)
  * 2. Advanced: Pass a viem WalletClient (for hardware wallets, WalletConnect, etc.)
  *
  * @param {string|Object} networkOrWalletClient - Network name OR viem WalletClient
  * @param {string} [privateKey] - Private key (only if first arg is network name)
+ * @param {Object} [options] - Options (only if first arg is network name)
+ * @param {string} [options.rpcUrl] - Custom RPC URL (overrides env var and default)
  * @returns {Promise<Object>} Signer object
  *
  * @example Simple approach (private key)
+ * const signer = await createSigner('base', '0xabc123...');
+ *
+ * @example With custom RPC
+ * const signer = await createSigner('base', '0xabc123...', {
+ *   rpcUrl: 'https://my-private-node.com'
+ * });
+ *
+ * @example Using environment variables
+ * // Set RPC_BASE=https://my-private-node.com in .env
  * const signer = await createSigner('base', '0xabc123...');
  *
  * @example Advanced approach (viem wallet client)
@@ -51,18 +62,18 @@ const NETWORKS = {
  * const walletClient = createWalletClient({
  *   account: privateKeyToAccount('0x...'),
  *   chain: base,
- *   transport: http()
+ *   transport: http('https://my-private-node.com')  // Custom RPC here
  * });
  * const signer = await createSigner(walletClient);
  */
-async function createSigner(networkOrWalletClient, privateKey) {
+async function createSigner(networkOrWalletClient, privateKey, options = {}) {
   // Detect if first argument is a viem WalletClient
   if (isViemWalletClient(networkOrWalletClient)) {
     return createSignerFromViemClient(networkOrWalletClient);
   }
 
   // Otherwise, treat as network + privateKey approach
-  return createSignerFromPrivateKey(networkOrWalletClient, privateKey);
+  return createSignerFromPrivateKey(networkOrWalletClient, privateKey, options);
 }
 
 /**
@@ -183,7 +194,7 @@ async function createSignerFromViemClient(walletClient) {
  * Create signer from private key (original simple approach)
  * @private
  */
-async function createSignerFromPrivateKey(network, privateKey) {
+async function createSignerFromPrivateKey(network, privateKey, options = {}) {
   if (!network) {
     throw new Error('network is required');
   }
@@ -195,7 +206,9 @@ async function createSignerFromPrivateKey(network, privateKey) {
   }
 
   const networkConfig = NETWORKS[network];
-  const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+  // Priority: explicit option > env var > default
+  const rpcUrl = options.rpcUrl || networkConfig.rpcUrl;
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(privateKey, provider);
 
   return {

@@ -13,7 +13,9 @@ const TOKEN_ABI = [
   'function name() view returns (string)',
   'function version() view returns (string)',
   'function decimals() view returns (uint8)',
-  'function authorizationState(address, bytes32) view returns (bool)'
+  'function authorizationState(address, bytes32) view returns (bool)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)'
 ];
 
 // Token ABI for viem
@@ -46,6 +48,26 @@ const VIEM_TOKEN_ABI = [
     inputs: [
       { name: 'authorizer', type: 'address' },
       { name: 'nonce', type: 'bytes32' }
+    ],
+    outputs: [{ type: 'bool' }]
+  },
+  {
+    name: 'allowance',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' }
+    ],
+    outputs: [{ type: 'uint256' }]
+  },
+  {
+    name: 'approve',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' }
     ],
     outputs: [{ type: 'bool' }]
   }
@@ -232,6 +254,23 @@ async function createPayment(signer, requirements, facilitator) {
   } else {
     // Standard ERC-20 via Stargate
     const stargateAddress = await fetchStargateAddress(network.name, facilitator);
+
+    // Check allowance before proceeding
+    const allowance = await checkAllowance(signer, tokenAddress, address, stargateAddress);
+    if (allowance < BigInt(value)) {
+      const error = new Error(
+        `Insufficient allowance for ${tokenAddress}. ` +
+        `Required: ${value}, Current: ${allowance.toString()}. ` +
+        `Use approveToken() to approve the Stargate contract.`
+      );
+      error.code = 'INSUFFICIENT_ALLOWANCE';
+      error.required = value;
+      error.current = allowance.toString();
+      error.token = tokenAddress;
+      error.spender = stargateAddress;
+      throw error;
+    }
+
     const nonce = await getStargateNonce(signer, stargateAddress, address, tokenAddress);
 
     const domain = {
@@ -369,6 +408,95 @@ async function getTokenDetailsViem(signer, tokenAddress, address) {
 }
 
 /**
+ * Check token allowance for Stargate contract
+ * @private
+ */
+async function checkAllowance(signer, tokenAddress, ownerAddress, spenderAddress) {
+  if (signer.isViem) {
+    const publicClient = signer.getPublicClient();
+    return await publicClient.readContract({
+      address: tokenAddress,
+      abi: VIEM_TOKEN_ABI,
+      functionName: 'allowance',
+      args: [ownerAddress, spenderAddress]
+    });
+  } else {
+    const provider = signer.getProvider();
+    const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
+    return await token.allowance(ownerAddress, spenderAddress);
+  }
+}
+
+/**
+ * Approve a token for use with x402 payments
+ *
+ * Required for standard ERC-20 tokens (not needed for EIP-3009 tokens like USDC)
+ *
+ * @param {Object} signer - Signer created by createSigner()
+ * @param {string} tokenAddress - Token contract address
+ * @param {Object} options - Options
+ * @param {string} options.amount - Amount to approve (default: unlimited)
+ * @param {string} options.facilitator - Custom facilitator URL
+ * @returns {Promise<Object>} Transaction receipt
+ *
+ * @example
+ * // Approve unlimited
+ * const receipt = await approveToken(signer, '0x...');
+ *
+ * // Approve specific amount
+ * const receipt = await approveToken(signer, '0x...', { amount: '1000000000' });
+ */
+async function approveToken(signer, tokenAddress, options = {}) {
+  const facilitator = options.facilitator || DEFAULT_FACILITATOR;
+  const network = signer.getNetwork();
+  const address = signer.getAddress();
+
+  // Get Stargate address
+  const stargateAddress = await fetchStargateAddress(network.name, facilitator);
+
+  // Determine approval amount (default: unlimited)
+  const amount = options.amount ? BigInt(options.amount) : ethers.MaxUint256;
+
+  if (signer.isViem) {
+    // viem approach - need wallet client with writeContract
+    const walletClient = signer.getWalletClient();
+    const publicClient = signer.getPublicClient();
+
+    const hash = await walletClient.writeContract({
+      address: tokenAddress,
+      abi: VIEM_TOKEN_ABI,
+      functionName: 'approve',
+      args: [stargateAddress, amount]
+    });
+
+    // Wait for transaction
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    return {
+      hash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber,
+      status: receipt.status === 'success' ? 1 : 0,
+      spender: stargateAddress,
+      amount: amount.toString()
+    };
+  } else {
+    // ethers approach
+    const wallet = signer.getWallet();
+    const token = new ethers.Contract(tokenAddress, TOKEN_ABI, wallet);
+
+    const tx = await token.approve(stargateAddress, amount);
+    const receipt = await tx.wait();
+
+    return {
+      hash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      status: receipt.status,
+      spender: stargateAddress,
+      amount: amount.toString()
+    };
+  }
+}
+
+/**
  * Get Stargate nonce for ERC-20 payments
  * @private
  */
@@ -431,5 +559,6 @@ async function fetchStargateAddress(network, facilitator) {
 module.exports = {
   x402Fetch,
   x402Axios,
+  approveToken,
   DEFAULT_FACILITATOR
 };
