@@ -5,9 +5,7 @@
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "test": "node examples/basic-payment.js",
-    "signer": "node tools/signer.js",
-    "approve": "node tools/approve.js"
+    "test": "node examples/basic-payment.js"
   },
   "keywords": [
     "x402",
@@ -42,7 +40,6 @@
     "signer.js",
     "payer.js",
     "payee.js",
-    "tools/",
     "examples/",
     "README.md"
   ],
