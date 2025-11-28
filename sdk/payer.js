@@ -105,8 +105,9 @@ function x402Fetch(fetch, signer, options = {}) {
     const paymentRequired = await response.json();
     const requirements = paymentRequired.paymentRequirements || paymentRequired;
 
-    // Validate amount
-    const amount = parseFloat(ethers.formatUnits(requirements.maxAmountRequired || '0', 6));
+    // Get token decimals and validate amount
+    const decimals = await getTokenDecimals(signer, requirements.asset);
+    const amount = parseFloat(ethers.formatUnits(requirements.maxAmountRequired || '0', decimals));
     if (amount > maxAmount) {
       throw new Error(`Payment amount ${amount} exceeds maxAmount ${maxAmount}`);
     }
@@ -157,8 +158,9 @@ function x402Axios(axiosInstance, signer, options = {}) {
 
       const requirements = error.response.data.paymentRequirements || error.response.data;
 
-      // Validate amount
-      const amount = parseFloat(ethers.formatUnits(requirements.maxAmountRequired || '0', 6));
+      // Get token decimals and validate amount
+      const decimals = await getTokenDecimals(signer, requirements.asset);
+      const amount = parseFloat(ethers.formatUnits(requirements.maxAmountRequired || '0', decimals));
       if (amount > maxAmount) {
         throw new Error(`Payment amount ${amount} exceeds maxAmount ${maxAmount}`);
       }
@@ -405,6 +407,36 @@ async function getTokenDetailsViem(signer, tokenAddress, address) {
   }
 
   return { tokenName, tokenVersion, isEIP3009 };
+}
+
+// Decimals cache to avoid repeated RPC calls
+const decimalsCache = {};
+
+/**
+ * Get token decimals (with caching)
+ * @private
+ */
+async function getTokenDecimals(signer, tokenAddress) {
+  if (decimalsCache[tokenAddress] !== undefined) {
+    return decimalsCache[tokenAddress];
+  }
+
+  let decimals;
+  if (signer.isViem) {
+    const publicClient = signer.getPublicClient();
+    decimals = await publicClient.readContract({
+      address: tokenAddress,
+      abi: VIEM_TOKEN_ABI,
+      functionName: 'decimals'
+    });
+  } else {
+    const provider = signer.getProvider();
+    const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
+    decimals = await token.decimals();
+  }
+
+  decimalsCache[tokenAddress] = Number(decimals);
+  return decimalsCache[tokenAddress];
 }
 
 /**
