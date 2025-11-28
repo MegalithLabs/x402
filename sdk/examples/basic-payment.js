@@ -33,7 +33,7 @@ async function main() {
   // Step 2: Wrap fetch with payment capability
   console.log('Wrapping fetch with x402...');
   const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: MAX_AMOUNT });
-  console.log('  Max amount per request: $' + MAX_AMOUNT);
+  console.log('  Max amount per request:', MAX_AMOUNT, 'tokens');
   console.log('');
 
   // Step 3: Make request (payment happens automatically if needed)
