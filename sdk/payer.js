@@ -8,6 +8,9 @@ const { ethers } = require('ethers');
 // Default facilitator
 const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
 
+// Default timeout for facilitator requests (10 seconds)
+const FACILITATOR_TIMEOUT_MS = 10000;
+
 /**
  * Cross-platform base64 encode (works in Node.js and browsers)
  * @private
@@ -28,6 +31,69 @@ function base64Decode(str) {
     return Buffer.from(str, 'base64').toString();
   }
   return atob(str);
+}
+
+/**
+ * Parse payment requirements from 402 response
+ * Expects x402 format: { x402Version: 1, accepts: [...] }
+ * @private
+ */
+function parsePaymentRequirements(responseData) {
+  if (!responseData.x402Version) {
+    throw new Error('Invalid 402 response: missing x402Version');
+  }
+  if (!Array.isArray(responseData.accepts) || responseData.accepts.length === 0) {
+    throw new Error('Invalid 402 response: missing or empty accepts array');
+  }
+  // Return the first accepted payment scheme
+  return responseData.accepts[0];
+}
+
+/**
+ * Verify a payment with the facilitator before submitting
+ * This is optional but recommended to catch errors early
+ * @private
+ */
+async function verifyPayment(payment, requirements, facilitator, timeoutMs = FACILITATOR_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const payload = {
+      x402Version: 1,
+      paymentPayload: payment,
+      paymentRequirements: {
+        scheme: requirements.scheme || 'exact',
+        network: requirements.network,
+        maxAmountRequired: requirements.maxAmountRequired,
+        asset: requirements.asset
+      }
+    };
+
+    const response = await fetch(`${facilitator}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      const err = new Error(error.error || `Payment verification failed: ${response.status}`);
+      err.code = 'VERIFY_FAILED';
+      err.details = error;
+      throw err;
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Facilitator verify request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Token ABI for getting details (ethers format)
@@ -103,6 +169,7 @@ const VIEM_TOKEN_ABI = [
  * @param {Object} options - Options
  * @param {string} options.maxAmount - Maximum amount to pay per request (e.g., '0.50')
  * @param {string} options.facilitator - Custom facilitator URL
+ * @param {boolean} options.verify - Verify payment with facilitator before sending (default: true)
  * @returns {Function} Wrapped fetch function
  *
  * @example
@@ -113,6 +180,7 @@ const VIEM_TOKEN_ABI = [
 function x402Fetch(fetch, signer, options = {}) {
   const maxAmount = options.maxAmount ? parseFloat(options.maxAmount) : 0.10;
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
+  const shouldVerify = options.verify !== false; // Default to true
 
   return async function fetchWithPayment(url, init = {}) {
     // Make initial request
@@ -123,9 +191,9 @@ function x402Fetch(fetch, signer, options = {}) {
       return response;
     }
 
-    // Parse payment requirements from response
+    // Parse payment requirements from x402 response
     const paymentRequired = await response.json();
-    const requirements = paymentRequired.paymentRequirements || paymentRequired;
+    const requirements = parsePaymentRequirements(paymentRequired);
 
     // Get token decimals and validate amount
     const decimals = await getTokenDecimals(signer, requirements.asset);
@@ -136,6 +204,11 @@ function x402Fetch(fetch, signer, options = {}) {
 
     // Create payment
     const payment = await createPayment(signer, requirements, facilitator);
+
+    // Verify payment before sending (optional but recommended)
+    if (shouldVerify) {
+      await verifyPayment(payment, requirements, facilitator);
+    }
 
     // Retry with payment header
     const paymentHeader = base64Encode(JSON.stringify(payment));
@@ -159,6 +232,7 @@ function x402Fetch(fetch, signer, options = {}) {
  * @param {Object} options - Options
  * @param {string} options.maxAmount - Maximum amount to pay per request
  * @param {string} options.facilitator - Custom facilitator URL
+ * @param {boolean} options.verify - Verify payment with facilitator before sending (default: true)
  * @returns {Object} Axios instance with payment interceptor
  *
  * @example
@@ -169,6 +243,7 @@ function x402Fetch(fetch, signer, options = {}) {
 function x402Axios(axiosInstance, signer, options = {}) {
   const maxAmount = options.maxAmount ? parseFloat(options.maxAmount) : 0.10;
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
+  const shouldVerify = options.verify !== false; // Default to true
 
   // Add response interceptor to handle 402
   axiosInstance.interceptors.response.use(
@@ -178,7 +253,8 @@ function x402Axios(axiosInstance, signer, options = {}) {
         throw error;
       }
 
-      const requirements = error.response.data.paymentRequirements || error.response.data;
+      // Parse requirements from x402 response
+      const requirements = parsePaymentRequirements(error.response.data);
 
       // Get token decimals and validate amount
       const decimals = await getTokenDecimals(signer, requirements.asset);
@@ -189,6 +265,11 @@ function x402Axios(axiosInstance, signer, options = {}) {
 
       // Create payment
       const payment = await createPayment(signer, requirements, facilitator);
+
+      // Verify payment before sending (optional but recommended)
+      if (shouldVerify) {
+        await verifyPayment(payment, requirements, facilitator);
+      }
 
       // Retry with payment header
       const paymentHeader = base64Encode(JSON.stringify(payment));
@@ -598,16 +679,30 @@ function generateRandomBytes32() {
  * Fetch Stargate contract address from facilitator
  * @private
  */
-async function fetchStargateAddress(network, facilitator) {
-  const response = await fetch(`${facilitator}/contracts`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Stargate address: ${response.status}`);
+async function fetchStargateAddress(network, facilitator, timeoutMs = FACILITATOR_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${facilitator}/contracts`, {
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Stargate address: ${response.status}`);
+    }
+    const contracts = await response.json();
+    if (!contracts[network]) {
+      throw new Error(`Network ${network} not supported`);
+    }
+    return contracts[network].stargate;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Facilitator request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  const contracts = await response.json();
-  if (!contracts[network]) {
-    throw new Error(`Network ${network} not supported`);
-  }
-  return contracts[network].stargate;
 }
 
 module.exports = {
