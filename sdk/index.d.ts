@@ -61,6 +61,8 @@ export interface PayerOptions {
   maxAmount?: string;
   /** Custom facilitator URL */
   facilitator?: string;
+  /** Verify payment with facilitator before sending (default: true) */
+  verify?: boolean;
 }
 
 /**

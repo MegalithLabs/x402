@@ -37,11 +37,53 @@ function base64Decode(str) {
   return atob(str);
 }
 
-// Token ABI for decimals
-const TOKEN_ABI = ['function decimals() view returns (uint8)'];
+// Token ABI for decimals, name, and version
+const TOKEN_ABI = [
+  'function decimals() view returns (uint8)',
+  'function name() view returns (string)',
+  'function version() view returns (string)'
+];
 
 // Cache for token decimals
 const decimalsCache = {};
+
+// Cache for token metadata (name, version)
+const tokenMetadataCache = {};
+
+/**
+ * Fetch token metadata (name, version) from blockchain (with caching)
+ * Required for EIP-712 domain in the extra field
+ * @private
+ */
+async function getTokenMetadata(asset, network) {
+  const cacheKey = `${network}:${asset}`;
+  if (tokenMetadataCache[cacheKey] !== undefined) {
+    return tokenMetadataCache[cacheKey];
+  }
+
+  const rpcUrl = NETWORK_RPC[network];
+  if (!rpcUrl) {
+    throw new Error(`Unknown network: ${network}`);
+  }
+
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const token = new ethers.Contract(asset, TOKEN_ABI, provider);
+
+  try {
+    // Fetch name and version in parallel
+    const [name, version] = await Promise.all([
+      token.name().catch(() => 'Unknown Token'),
+      token.version().catch(() => '1') // Default to '1' if not implemented
+    ]);
+
+    tokenMetadataCache[cacheKey] = { name, version };
+    return tokenMetadataCache[cacheKey];
+  } catch (error) {
+    // Fallback if both fail
+    tokenMetadataCache[cacheKey] = { name: 'Unknown Token', version: '1' };
+    return tokenMetadataCache[cacheKey];
+  }
+}
 
 /**
  * Fetch token decimals from blockchain (with caching)
@@ -114,10 +156,10 @@ function x402Express(payTo, routes, options = {}) {
     // Check for payment header
     const paymentHeader = req.headers['x-payment'];
     if (!paymentHeader) {
-      // Return 402 with payment requirements
+      // Return 402 with payment requirements (x402-compliant format)
       try {
-        const requirements = await buildPaymentRequirements(payTo, config, req.path);
-        return res.status(402).json({ paymentRequirements: requirements });
+        const x402Response = await buildPaymentRequirements(payTo, config, req.path);
+        return res.status(402).json(x402Response);
       } catch (error) {
         return res.status(500).json({ error: error.message });
       }
@@ -135,11 +177,9 @@ function x402Express(payTo, routes, options = {}) {
       next();
     } catch (error) {
       try {
-        const requirements = await buildPaymentRequirements(payTo, config, req.path);
-        return res.status(402).json({
-          error: error.message,
-          paymentRequirements: requirements
-        });
+        const x402Response = await buildPaymentRequirements(payTo, config, req.path);
+        x402Response.error = error.message;
+        return res.status(402).json(x402Response);
       } catch (reqError) {
         return res.status(500).json({ error: reqError.message });
       }
@@ -178,8 +218,8 @@ function x402Hono(payTo, routes, options = {}) {
     const paymentHeader = c.req.header('x-payment');
     if (!paymentHeader) {
       try {
-        const requirements = await buildPaymentRequirements(payTo, config, c.req.path);
-        return c.json({ paymentRequirements: requirements }, 402);
+        const x402Response = await buildPaymentRequirements(payTo, config, c.req.path);
+        return c.json(x402Response, 402);
       } catch (error) {
         return c.json({ error: error.message }, 500);
       }
@@ -195,11 +235,9 @@ function x402Hono(payTo, routes, options = {}) {
       await next();
     } catch (error) {
       try {
-        const requirements = await buildPaymentRequirements(payTo, config, c.req.path);
-        return c.json({
-          error: error.message,
-          paymentRequirements: requirements
-        }, 402);
+        const x402Response = await buildPaymentRequirements(payTo, config, c.req.path);
+        x402Response.error = error.message;
+        return c.json(x402Response, 402);
       } catch (reqError) {
         return c.json({ error: reqError.message }, 500);
       }
@@ -265,8 +303,8 @@ async function handleAppRouter(req, handler, config, facilitator) {
   if (!paymentHeader) {
     try {
       const url = new URL(req.url);
-      const requirements = await buildPaymentRequirements(config.payTo, config, url.pathname);
-      return Response.json({ paymentRequirements: requirements }, { status: 402 });
+      const x402Response = await buildPaymentRequirements(config.payTo, config, url.pathname);
+      return Response.json(x402Response, { status: 402 });
     } catch (error) {
       return Response.json({ error: error.message }, { status: 500 });
     }
@@ -291,11 +329,9 @@ async function handleAppRouter(req, handler, config, facilitator) {
   } catch (error) {
     try {
       const url = new URL(req.url);
-      const requirements = await buildPaymentRequirements(config.payTo, config, url.pathname);
-      return Response.json({
-        error: error.message,
-        paymentRequirements: requirements
-      }, { status: 402 });
+      const x402Response = await buildPaymentRequirements(config.payTo, config, url.pathname);
+      x402Response.error = error.message;
+      return Response.json(x402Response, { status: 402 });
     } catch (reqError) {
       return Response.json({ error: reqError.message }, { status: 500 });
     }
@@ -311,8 +347,8 @@ async function handlePagesRouter(req, res, handler, config, facilitator) {
 
   if (!paymentHeader) {
     try {
-      const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
-      return res.status(402).json({ paymentRequirements: requirements });
+      const x402Response = await buildPaymentRequirements(config.payTo, config, req.url);
+      return res.status(402).json(x402Response);
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
@@ -327,11 +363,9 @@ async function handlePagesRouter(req, res, handler, config, facilitator) {
     return await handler(req, res);
   } catch (error) {
     try {
-      const requirements = await buildPaymentRequirements(config.payTo, config, req.url);
-      return res.status(402).json({
-        error: error.message,
-        paymentRequirements: requirements
-      });
+      const x402Response = await buildPaymentRequirements(config.payTo, config, req.url);
+      x402Response.error = error.message;
+      return res.status(402).json(x402Response);
     } catch (reqError) {
       return res.status(500).json({ error: reqError.message });
     }
@@ -340,6 +374,7 @@ async function handlePagesRouter(req, res, handler, config, facilitator) {
 
 /**
  * Build payment requirements object
+ * Returns the full x402-compliant response with accepts array
  * @private
  */
 async function buildPaymentRequirements(payTo, config, resource) {
@@ -354,10 +389,14 @@ async function buildPaymentRequirements(payTo, config, resource) {
     throw new Error('network is required in route config');
   }
 
-  // Convert human-readable amount to atomic units
-  const maxAmountRequired = await toAtomicUnits(config.amount, config.asset, config.network);
+  // Fetch token decimals and metadata in parallel
+  const [maxAmountRequired, tokenMetadata] = await Promise.all([
+    toAtomicUnits(config.amount, config.asset, config.network),
+    getTokenMetadata(config.asset, config.network)
+  ]);
 
-  return {
+  // Build the payment requirement object (goes in accepts array)
+  const requirement = {
     scheme: 'exact',
     network: config.network,
     maxAmountRequired,
@@ -365,8 +404,19 @@ async function buildPaymentRequirements(payTo, config, resource) {
     description: config.description || `Payment of ${config.amount} tokens for ${resource}`,
     mimeType: 'application/json',
     payTo,
-    maxTimeoutSeconds: 30,
-    asset: config.asset
+    maxTimeoutSeconds: config.maxTimeoutSeconds || 30,
+    asset: config.asset,
+    // Extra field contains token metadata for EIP-712 domain
+    extra: {
+      name: tokenMetadata.name,
+      version: tokenMetadata.version
+    }
+  };
+
+  // Return full x402-compliant response structure
+  return {
+    x402Version: 1,
+    accepts: [requirement]
   };
 }
 
@@ -395,11 +445,14 @@ function findMatchingRoute(path, routePatterns) {
   return null;
 }
 
+// Default timeout for facilitator requests (10 seconds)
+const FACILITATOR_TIMEOUT_MS = 10000;
+
 /**
  * Settle payment with facilitator
  * @private
  */
-async function settlePayment(payment, config, facilitator) {
+async function settlePayment(payment, config, facilitator, timeoutMs = FACILITATOR_TIMEOUT_MS) {
   // Build full payload for facilitator
   const maxAmountRequired = await toAtomicUnits(config.amount, config.asset, config.network);
 
@@ -414,18 +467,32 @@ async function settlePayment(payment, config, facilitator) {
     }
   };
 
-  const response = await fetch(`${facilitator}/settle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || `Settlement failed: ${response.status}`);
+  try {
+    const response = await fetch(`${facilitator}/settle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `Settlement failed: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Facilitator request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return await response.json();
 }
 
 module.exports = {
