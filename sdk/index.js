@@ -9,7 +9,7 @@ const { createSigner, NETWORKS } = require('./signer');
 const { x402Fetch, x402Axios, approveToken } = require('./payer');
 
 // Payee middleware (for charging for APIs)
-const { x402Express, x402Hono, x402Next } = require('./payee');
+const { x402Express, x402Hono, x402Next, DEFAULT_FACILITATOR } = require('./payee');
 
 module.exports = {
   // Signer
@@ -24,5 +24,8 @@ module.exports = {
   // Payee
   x402Express,
   x402Hono,
-  x402Next
+  x402Next,
+
+  // Constants
+  DEFAULT_FACILITATOR
 };

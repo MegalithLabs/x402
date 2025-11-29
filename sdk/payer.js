@@ -87,7 +87,7 @@ async function verifyPayment(payment, requirements, facilitator, timeoutMs = FAC
  * @param {Function} fetch - The fetch function to wrap
  * @param {Object} signer - Signer created by createSigner()
  * @param {Object} options - Options
- * @param {string} options.maxAmount - Maximum amount to pay per request (e.g., '0.50')
+ * @param {string} options.maxAmount - Maximum amount to pay per request (e.g., '0.50') - REQUIRED
  * @param {string} options.facilitator - Custom facilitator URL
  * @param {boolean} options.verify - Verify payment with facilitator before sending (default: true)
  * @returns {Function} Wrapped fetch function
@@ -98,7 +98,10 @@ async function verifyPayment(payment, requirements, facilitator, timeoutMs = FAC
  * const response = await fetchWithPay('https://api.example.com/data');
  */
 function x402Fetch(fetch, signer, options = {}) {
-  const maxAmount = options.maxAmount ? parseFloat(options.maxAmount) : 0.10;
+  if (!options.maxAmount) {
+    throw new Error('maxAmount is required. Specify the maximum amount you are willing to pay per request (e.g., { maxAmount: "0.50" })');
+  }
+  const maxAmount = parseFloat(options.maxAmount);
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
   const shouldVerify = options.verify !== false; // Default to true
 
@@ -170,7 +173,7 @@ function x402Fetch(fetch, signer, options = {}) {
  * @param {Object} axios - Axios instance to wrap
  * @param {Object} signer - Signer created by createSigner()
  * @param {Object} options - Options
- * @param {string} options.maxAmount - Maximum amount to pay per request
+ * @param {string} options.maxAmount - Maximum amount to pay per request - REQUIRED
  * @param {string} options.facilitator - Custom facilitator URL
  * @param {boolean} options.verify - Verify payment with facilitator before sending (default: true)
  * @returns {Object} Axios instance with payment interceptor
@@ -181,7 +184,10 @@ function x402Fetch(fetch, signer, options = {}) {
  * const response = await axiosWithPay.get('https://api.example.com/data');
  */
 function x402Axios(axiosInstance, signer, options = {}) {
-  const maxAmount = options.maxAmount ? parseFloat(options.maxAmount) : 0.10;
+  if (!options.maxAmount) {
+    throw new Error('maxAmount is required. Specify the maximum amount you are willing to pay per request (e.g., { maxAmount: "0.50" })');
+  }
+  const maxAmount = parseFloat(options.maxAmount);
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
   const shouldVerify = options.verify !== false; // Default to true
 
