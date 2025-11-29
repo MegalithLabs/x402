@@ -14,6 +14,14 @@ Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.
 npm install @megalithlabs/x402
 ```
 
+**For viem WalletClient support** (hardware wallets, WalletConnect, etc.):
+
+```bash
+npm install @megalithlabs/x402 viem
+```
+
+> **Note:** viem is an optional peer dependency. Only install it if you need WalletClient support for hardware wallets, WalletConnect, or other advanced wallet integrations. The simple approach using private keys works with just ethers (included by default).
+
 ---
 
 ## Quick Start
@@ -37,6 +45,8 @@ const data = await response.json();
 ```
 
 **Advanced approach (viem wallet client):**
+
+> **Requires viem:** Run `npm install viem` first.
 
 ```javascript
 const { createSigner, x402Fetch } = require('@megalithlabs/x402');
@@ -106,6 +116,8 @@ const signer = await createSigner('base', '0xabc123...');
 | `privateKey` | string | Wallet private key (hex string) |
 
 **Advanced approach (viem wallet client):**
+
+> **Requires viem:** Run `npm install viem` first.
 
 ```javascript
 const { createWalletClient, http } = require('viem');
@@ -303,6 +315,47 @@ node approve.js
 ```
 
 See `/tools/README.md` in the repository for details.
+
+---
+
+## Debugging
+
+The SDK includes debug logging powered by the `debug` package. Enable it by setting the `DEBUG` environment variable:
+
+```bash
+# Enable all x402 debug output
+DEBUG=x402:* node app.js
+
+# Enable only payer debug (client-side)
+DEBUG=x402:payer node app.js
+
+# Enable only payee debug (server-side)
+DEBUG=x402:payee node app.js
+
+# Enable multiple namespaces
+DEBUG=x402:payer,x402:signer node app.js
+
+# Save debug output to a file
+DEBUG=x402:* node app.js 2> debug.log
+```
+
+**Example output:**
+```
+x402:payer Request to https://api.example.com/premium +0ms
+x402:payer Got 402 Payment Required +125ms
+x402:payer Payment requirements: { scheme: 'exact', network: 'base', ... } +2ms
+x402:payer Creating payment... +0ms
+x402:payer Payment created, signature: 0x1a2b3c... +340ms
+x402:payer Verifying payment with facilitator: https://x402.megalithlabs.ai +0ms
+x402:payer Payment verified successfully +89ms
+x402:payer Retrying request with X-PAYMENT header +0ms
+x402:payer Final response: 200 +201ms
+```
+
+**Available namespaces:**
+- `x402:payer` - Client-side payment flow (fetch/axios wrappers)
+- `x402:payee` - Server-side middleware (Express/Hono/Next.js)
+- `x402:signer` - Wallet signer initialization
 
 ---
 

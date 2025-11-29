@@ -4,30 +4,9 @@
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
+const { NETWORKS, createDebugLogger } = require('./utils');
 
-// Network configurations with env var overrides
-const NETWORKS = {
-  'base': {
-    name: 'Base Mainnet',
-    chainId: 8453,
-    rpcUrl: process.env.RPC_BASE || 'https://mainnet.base.org/'
-  },
-  'base-sepolia': {
-    name: 'Base Sepolia',
-    chainId: 84532,
-    rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
-  },
-  'bsc': {
-    name: 'BNB Chain Mainnet',
-    chainId: 56,
-    rpcUrl: process.env.RPC_BSC || 'https://bsc-dataseed.binance.org/'
-  },
-  'bsc-testnet': {
-    name: 'BNB Chain Testnet',
-    chainId: 97,
-    rpcUrl: process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
-  }
-};
+const debug = createDebugLogger('signer');
 
 /**
  * Create a signer for x402 payments
@@ -69,10 +48,12 @@ const NETWORKS = {
 async function createSigner(networkOrWalletClient, privateKey, options = {}) {
   // Detect if first argument is a viem WalletClient
   if (isViemWalletClient(networkOrWalletClient)) {
+    debug('Creating signer from viem WalletClient');
     return createSignerFromViemClient(networkOrWalletClient);
   }
 
   // Otherwise, treat as network + privateKey approach
+  debug('Creating signer from private key for network: %s', networkOrWalletClient);
   return createSignerFromPrivateKey(networkOrWalletClient, privateKey, options);
 }
 
@@ -95,7 +76,17 @@ function isViemWalletClient(obj) {
  * @private
  */
 async function createSignerFromViemClient(walletClient) {
-  const { createPublicClient, http } = require('viem');
+  // Lazy-load viem - it's an optional peer dependency
+  let viem;
+  try {
+    viem = require('viem');
+  } catch (e) {
+    throw new Error(
+      'viem is required for WalletClient support but is not installed. ' +
+      'Install it with: npm install viem'
+    );
+  }
+  const { createPublicClient, http } = viem;
 
   const account = walletClient.account;
   const chain = walletClient.chain;
@@ -110,6 +101,7 @@ async function createSignerFromViemClient(walletClient) {
 
   // Map viem chain to our network name
   const networkName = getNetworkNameFromChainId(chain.id);
+  debug('viem: Network=%s, Chain ID=%d, Address=%s', networkName, chain.id, account.address);
 
   // Create public client for read operations, using same transport as wallet client
   // This ensures we use the same RPC endpoint for consistency
@@ -212,6 +204,9 @@ async function createSignerFromPrivateKey(network, privateKey, options = {}) {
   const rpcUrl = options.rpcUrl || networkConfig.rpcUrl;
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(privateKey, provider);
+
+  debug('ethers: Network=%s, Chain ID=%d, Address=%s', network, networkConfig.chainId, wallet.address);
+  debug('ethers: RPC URL=%s', rpcUrl);
 
   return {
     /**
