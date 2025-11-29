@@ -675,6 +675,4 @@ Currently no rate limits enforced. Fair use expected.
 - EIP-3009 and ERC-20 support via Stargate
 - Payload/requirements validation
 - Auto-detection for token types
-- Base Mainnet, Base Sepolia, BNB Chain mainnet and testnet support
-- `/supported` endpoint for network discovery
-- Token metadata (`name`, `version`) in `extra` field
+- BNB Chain mainnet and testnet, and Base Mainnet and Sepolia
