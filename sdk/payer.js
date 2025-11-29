@@ -6,6 +6,7 @@
 const { ethers } = require('ethers');
 const {
   createDebugLogger,
+  createBoundedCache,
   DEFAULT_FACILITATOR,
   FACILITATOR_TIMEOUT_MS,
   base64Encode,
@@ -249,19 +250,37 @@ async function createPayment(signer, requirements, facilitator) {
   const payTo = requirements.payTo;
   const value = requirements.maxAmountRequired;
 
-  // Get token details - use appropriate method based on signer type
+  // Get token details - prefer extra field from server to avoid RPC calls
   let tokenName, tokenVersion, isEIP3009;
 
-  if (signer.isViem) {
-    const result = await getTokenDetailsViem(signer, tokenAddress, address);
-    tokenName = result.tokenName;
-    tokenVersion = result.tokenVersion;
-    isEIP3009 = result.isEIP3009;
+  // Use extra field if provided by the server (recommended)
+  if (requirements.extra?.name && requirements.extra?.version) {
+    debug('Using token metadata from extra field: %s v%s', requirements.extra.name, requirements.extra.version);
+    tokenName = requirements.extra.name;
+    tokenVersion = requirements.extra.version;
+
+    // Still need to detect if EIP-3009 token
+    if (signer.isViem) {
+      const result = await checkEIP3009Viem(signer, tokenAddress, address);
+      isEIP3009 = result;
+    } else {
+      const result = await checkEIP3009Ethers(signer, tokenAddress, address);
+      isEIP3009 = result;
+    }
   } else {
-    const result = await getTokenDetailsEthers(signer, tokenAddress, address);
-    tokenName = result.tokenName;
-    tokenVersion = result.tokenVersion;
-    isEIP3009 = result.isEIP3009;
+    // Fallback: fetch from chain if extra field not provided
+    debug('No extra field, fetching token metadata from chain');
+    if (signer.isViem) {
+      const result = await getTokenDetailsViem(signer, tokenAddress, address);
+      tokenName = result.tokenName;
+      tokenVersion = result.tokenVersion;
+      isEIP3009 = result.isEIP3009;
+    } else {
+      const result = await getTokenDetailsEthers(signer, tokenAddress, address);
+      tokenName = result.tokenName;
+      tokenVersion = result.tokenVersion;
+      isEIP3009 = result.isEIP3009;
+    }
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -301,7 +320,7 @@ async function createPayment(signer, requirements, facilitator) {
       nonce
     };
 
-    signature = await signer.signTypedData(domain, types, message);
+    signature = await signer.signTypedData(domain, types, message, 'TransferWithAuthorization');
     authorization = {
       from: address,
       to: payTo,
@@ -361,7 +380,7 @@ async function createPayment(signer, requirements, facilitator) {
       validBefore
     };
 
-    signature = await signer.signTypedData(domain, types, message);
+    signature = await signer.signTypedData(domain, types, message, 'ERC20Payment');
     authorization = {
       from: address,
       to: payTo,
@@ -382,6 +401,44 @@ async function createPayment(signer, requirements, facilitator) {
       authorization
     }
   };
+}
+
+/**
+ * Check if token supports EIP-3009 using ethers provider
+ * @private
+ */
+async function checkEIP3009Ethers(signer, tokenAddress, address) {
+  const provider = signer.getProvider();
+  const token = new ethers.Contract(tokenAddress, TOKEN_ABI_ETHERS, provider);
+
+  try {
+    const testNonce = ethers.hexlify(ethers.randomBytes(32));
+    await token.authorizationState(address, testNonce);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Check if token supports EIP-3009 using viem public client
+ * @private
+ */
+async function checkEIP3009Viem(signer, tokenAddress, address) {
+  const publicClient = signer.getPublicClient();
+
+  try {
+    const testNonce = generateRandomBytes32();
+    await publicClient.readContract({
+      address: tokenAddress,
+      abi: TOKEN_ABI_VIEM,
+      functionName: 'authorizationState',
+      args: [address, testNonce]
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -466,16 +523,17 @@ async function getTokenDetailsViem(signer, tokenAddress, address) {
   return { tokenName, tokenVersion, isEIP3009 };
 }
 
-// Decimals cache to avoid repeated RPC calls
-const decimalsCache = {};
+// Bounded decimals cache to avoid repeated RPC calls (max 100 tokens)
+const decimalsCache = createBoundedCache(100);
 
 /**
  * Get token decimals (with caching)
  * @private
  */
 async function getTokenDecimals(signer, tokenAddress) {
-  if (decimalsCache[tokenAddress] !== undefined) {
-    return decimalsCache[tokenAddress];
+  const cached = decimalsCache.get(tokenAddress);
+  if (cached !== undefined) {
+    return cached;
   }
 
   let decimals;
@@ -492,8 +550,9 @@ async function getTokenDecimals(signer, tokenAddress) {
     decimals = await token.decimals();
   }
 
-  decimalsCache[tokenAddress] = Number(decimals);
-  return decimalsCache[tokenAddress];
+  const result = Number(decimals);
+  decimalsCache.set(tokenAddress, result);
+  return result;
 }
 
 /**

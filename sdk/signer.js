@@ -113,10 +113,19 @@ async function createSignerFromViemClient(walletClient) {
   return {
     /**
      * Sign an EIP-712 typed data payment
+     * @param {object} domain - EIP-712 domain
+     * @param {object} types - EIP-712 types
+     * @param {object} message - Message to sign
+     * @param {string} [primaryType] - Primary type name (auto-detected if not provided)
      */
-    async signTypedData(domain, types, message) {
-      // viem uses slightly different format - needs primaryType
-      const primaryType = Object.keys(types)[0];
+    async signTypedData(domain, types, message, primaryType) {
+      // Use provided primaryType, or detect from types object
+      // Note: Object.keys order is reliable in modern JS engines for string keys,
+      // but explicit is better than implicit
+      if (!primaryType) {
+        const typeNames = Object.keys(types);
+        primaryType = typeNames[0];
+      }
 
       return await walletClient.signTypedData({
         account,
@@ -211,8 +220,13 @@ async function createSignerFromPrivateKey(network, privateKey, options = {}) {
   return {
     /**
      * Sign an EIP-712 typed data payment
+     * @param {object} domain - EIP-712 domain
+     * @param {object} types - EIP-712 types
+     * @param {object} message - Message to sign
+     * @param {string} [primaryType] - Primary type name (unused for ethers, included for API consistency)
      */
-    async signTypedData(domain, types, message) {
+    async signTypedData(domain, types, message, primaryType) {
+      // ethers infers primaryType automatically, but we accept it for API consistency
       return await wallet.signTypedData(domain, types, message);
     },
 

@@ -132,6 +132,8 @@ export interface RouteConfig {
   network: NetworkName;
   /** Optional description */
   description?: string;
+  /** Maximum timeout in seconds for payment settlement (default: 30) */
+  maxTimeoutSeconds?: number;
 }
 
 export interface NextRouteConfig extends RouteConfig {
