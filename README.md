@@ -12,49 +12,96 @@ Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.
 
 x402 is an open payment protocol that enables AI agents and web services to autonomously pay for API access, data, and digital services using stablecoins like USDC. It leverages the HTTP 402 "Payment Required" status code to enable:
 
-- 🤖 **AI-native payments** - Agents pay for APIs autonomously
-- 💰 **Micropayments** - Transactions as low as $0.001
-- ⚡ **Instant settlement** - ~200ms on Layer 2
-- 🔓 **No accounts required** - Pay-per-use without registration
-- 🌐 **Chain agnostic** - Works on any blockchain
-
----
-
-## Repository Contents
-
-- **[Signer/](Signer/)** - Client tool to create x402-compliant payment authorizations → **Start here!**
-- **[Contracts/](Contracts/)** - MegalithStargate smart contract source
+- **AI-native payments** - Agents pay for APIs autonomously
+- **Micropayments** - Transactions as low as $0.001
+- **Instant settlement** - ~200ms on Layer 2
+- **No accounts required** - Pay-per-use without registration
+- **Chain agnostic** - Works on any EVM blockchain
 
 ---
 
 ## Quick Start
 
+### Install the SDK
+
 ```bash
-cd Signer
-npm install
-cp signer.env.example signer.env
-# Edit signer.env with your details
-node signer.js
+npm install @megalithlabs/x402
 ```
 
-**Full documentation:** [Signer/README.md](Signer/README.md)
+### Pay for APIs (Payer)
+
+```javascript
+const { createSigner, x402Fetch } = require('@megalithlabs/x402');
+
+// Create signer with your wallet
+const signer = await createSigner('base', process.env.PRIVATE_KEY);
+
+// Wrap fetch to auto-handle 402 responses
+const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
+
+// Use it like normal fetch - payments happen automatically
+const response = await fetchWithPay('https://api.example.com/premium-data');
+```
+
+### Charge for APIs (Payee)
+
+```javascript
+const express = require('express');
+const { x402Express } = require('@megalithlabs/x402');
+
+const app = express();
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
+
+// Add payment requirement to routes
+app.use(x402Express('0xYourWalletAddress', {
+  '/api/premium': {
+    amount: '0.01',      // 0.01 USDC
+    asset: USDC,
+    network: 'base'
+  }
+}));
+
+app.get('/api/premium', (req, res) => {
+  res.json({ data: 'premium content' });
+});
+```
+
+**Full SDK documentation:** [sdk/README.md](sdk/README.md)
 
 ---
 
-## MegalithStargate Smart Contract
+## Repository Contents
 
-Enables x402 payments with standard ERC-20 tokens that lack native EIP-3009 support.
+| Folder | Description |
+|--------|-------------|
+| **[sdk/](sdk/)** | JavaScript SDK for payers and payees - `npm install @megalithlabs/x402` |
+| **[tools/](tools/)** | CLI tools for manual testing and token approval |
+| **[Contracts/](Contracts/)** | MegalithStargate smart contract source |
+| **[Docs/](Docs/)** | Facilitator API guide and protocol documentation |
 
-**Current Deployments (v1.0.0):**
+---
 
-| Network | Chain ID | Contract Address |
-|---------|----------|------------------|
-| **BNB Chain Mainnet** | 56 | `0x40200001004b5110333e4de8179426971efd034a` |
-| **BNB Chain Testnet** | 97 | `0x40200001004b5110333e4de8179426971efd034a` |
-| **Base Mainnet** | 8453 | `0x40200001004b5110333e4de8179426971efd034a` |
-| **Base Sepolia** | 84532 | `0x40200001004b5110333e4de8179426971efd034a` |
+## Supported Networks
 
-**Source:** [Contracts/Stargate.sol](Contracts/Stargate.sol)
+| Network | Chain ID | Status |
+|---------|----------|--------|
+| **Base Mainnet** | 8453 | Production |
+| **Base Sepolia** | 84532 | Testnet |
+| **BNB Chain Mainnet** | 56 | Production |
+| **BNB Chain Testnet** | 97 | Testnet |
+
+---
+
+## Token Support
+
+### EIP-3009 Tokens (Native Support)
+- **USDC** - Direct authorization, no approval needed
+- **EURC** - Direct authorization, no approval needed
+
+### Standard ERC-20 Tokens (via Stargate)
+- **USDT, DAI, BUSD, any ERC-20** - Requires one-time approval
+
+The SDK automatically detects which type of token you're using.
 
 ---
 
@@ -62,57 +109,37 @@ Enables x402 payments with standard ERC-20 tokens that lack native EIP-3009 supp
 
 **Production:** https://x402.megalithlabs.ai
 
-### Standard x402 Endpoints
+| Endpoint | Description |
+|----------|-------------|
+| `POST /verify` | Validate payment signature |
+| `POST /settle` | Execute payment on-chain |
+| `GET /supported` | List supported networks |
+| `GET /contracts` | Get Stargate contract addresses |
+| `GET /health` | Service health check |
 
-- **`POST /verify`** - Validate payment authorization signature
-- **`POST /settle`** - Execute payment on-chain and settle
-- **`GET /supported`** - List supported payment schemes and networks
-
-### Additional Endpoints
-
-- **`GET /contracts`** - Get current Stargate contract addresses
-- **`GET /health`** - Service health check
-
----
-
-## Supported Networks
-
-**Currently supported:**
-- ✅ **BNB Chain Mainnet** (Chain ID: 56)
-- ✅ **BNB Chain Testnet** (Chain ID: 97)
-- ✅ **Base Mainnet** (Chain ID: 8453)
-- ✅ **Base Sepolia** (Chain ID: 84532)
+**Full API documentation:** [Docs/facilitator_guide.md](Docs/facilitator_guide.md)
 
 ---
 
-## Token Support
+## MegalithStargate Contract
 
-### EIP-3009 Tokens (Native Support)
-- ✅ **USDC** - Direct authorization, no approval needed
-- ✅ **EURC** - Direct authorization, no approval needed
+Enables x402 payments with standard ERC-20 tokens that lack native EIP-3009 support.
 
-### Standard ERC-20 Tokens (via Stargate)
-- ✅ **USDT** - Requires one-time approval
-- ✅ **DAI** - Requires one-time approval
-- ✅ **BUSD** - Requires one-time approval
-- ✅ **Any ERC-20** - Just approve once, then sign payments
+**Deployed at:** `0x40200001004b5110333e4de8179426971efd034a` (same address on all networks)
 
-**Note:** Standard ERC-20 tokens require running `npm run approve` once before creating payment authorizations.
+**Source:** [Contracts/Stargate.sol](Contracts/Stargate.sol)
 
 ---
 
 ## Support
 
-- 🌐 Website: https://megalithlabs.ai
-- 🌐 x402 Protocol: https://x402.org
-- 📧 Email: support@megalithlabs.ai
-- 🐛 Issues: https://github.com/megalithlabs/x402/issues
-- 📚 Docs: [Signer/README.md](Signer/README.md)
+- Website: https://megalithlabs.ai
+- x402 Protocol: https://x402.org
+- Email: support@megalithlabs.ai
+- Issues: https://github.com/megalithlabs/x402/issues
 
 ---
 
 ## License
 
 MIT License - see [LICENSE](LICENSE)
-
----
