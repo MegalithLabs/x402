@@ -170,10 +170,10 @@ const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
 const response = await fetchWithPay('https://api.example.com/data');
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `maxAmount` | string | `'0.10'` | Maximum payment per request (e.g., `'0.50'`) |
-| `facilitator` | string | Megalith | Custom facilitator URL |
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `maxAmount` | string | **Yes** | Maximum payment per request (e.g., `'0.50'`) |
+| `facilitator` | string | No | Custom facilitator URL (default: Megalith) |
 
 ---
 

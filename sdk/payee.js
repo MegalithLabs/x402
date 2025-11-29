@@ -21,6 +21,14 @@ const decimalsCache = createBoundedCache(100);
 const tokenMetadataCache = createBoundedCache(100);
 
 /**
+ * Validate Ethereum address format
+ * @private
+ */
+function isValidAddress(address) {
+  return typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+/**
  * Fetch token metadata (name, version) from blockchain (with caching)
  * Required for EIP-712 domain in the extra field
  * @private
@@ -116,6 +124,9 @@ async function toAtomicUnits(amount, asset, network) {
  * }));
  */
 function x402Express(payTo, routes, options = {}) {
+  if (!isValidAddress(payTo)) {
+    throw new Error(`Invalid payTo address: ${payTo}. Must be a valid Ethereum address (0x followed by 40 hex characters).`);
+  }
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
   const routePatterns = compileRoutes(routes);
 
@@ -189,6 +200,9 @@ function x402Express(payTo, routes, options = {}) {
  * }));
  */
 function x402Hono(payTo, routes, options = {}) {
+  if (!isValidAddress(payTo)) {
+    throw new Error(`Invalid payTo address: ${payTo}. Must be a valid Ethereum address (0x followed by 40 hex characters).`);
+  }
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
   const routePatterns = compileRoutes(routes);
 
@@ -278,6 +292,9 @@ function x402Hono(payTo, routes, options = {}) {
  * );
  */
 function x402Next(handler, config, options = {}) {
+  if (!isValidAddress(config.payTo)) {
+    throw new Error(`Invalid payTo address: ${config.payTo}. Must be a valid Ethereum address (0x followed by 40 hex characters).`);
+  }
   const facilitator = options.facilitator || DEFAULT_FACILITATOR;
 
   return async function wrappedHandler(req, resOrContext) {
@@ -446,14 +463,22 @@ async function buildPaymentRequirements(payTo, config, resource) {
 
 /**
  * Compile route patterns for matching
+ * Escapes special regex characters except * (wildcard) and :param (path params)
  * @private
  */
 function compileRoutes(routes) {
-  return Object.entries(routes).map(([pattern, config]) => ({
-    pattern,
-    regex: new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/:[^/]+/g, '[^/]+') + '$'),
-    config
-  }));
+  return Object.entries(routes).map(([pattern, config]) => {
+    // Escape special regex characters, but preserve * and :param syntax
+    const escaped = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')  // Escape special chars (except *)
+      .replace(/\*/g, '.*')                    // Convert * to .*
+      .replace(/:[^/]+/g, '[^/]+');            // Convert :param to [^/]+
+    return {
+      pattern,
+      regex: new RegExp('^' + escaped + '$'),
+      config
+    };
+  });
 }
 
 /**
@@ -520,7 +545,14 @@ async function settlePayment(payment, config, facilitator, timeoutMs = FACILITAT
   } catch (error) {
     if (error.name === 'AbortError') {
       debug('Settlement timed out after %dms', timeoutMs);
-      throw new Error(`Facilitator request timed out after ${timeoutMs}ms`);
+      const err = new Error(`Facilitator request timed out after ${timeoutMs}ms. The facilitator may be temporarily unavailable - please retry.`);
+      err.code = 'FACILITATOR_TIMEOUT';
+      err.retryable = true;
+      throw err;
+    }
+    // Network errors are typically retryable
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.cause?.code === 'ECONNREFUSED') {
+      error.retryable = true;
     }
     throw error;
   } finally {

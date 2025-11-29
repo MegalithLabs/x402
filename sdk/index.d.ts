@@ -1,7 +1,9 @@
 // Type definitions for @megalithlabs/x402
 // https://megalithlabs.ai | https://x402.org
 
-import { WalletClient } from 'viem';
+// Note: WalletClient type is only available if viem is installed
+// viem is an optional peer dependency for advanced wallet support
+type WalletClient = any;
 
 // ============================================
 // Networks
@@ -22,13 +24,21 @@ export const NETWORKS: Record<NetworkName, NetworkConfig>;
 // ============================================
 
 export interface Signer {
-  signTypedData(domain: object, types: object, message: object): Promise<string>;
+  /** Sign EIP-712 typed data */
+  signTypedData(domain: object, types: object, message: object, primaryType?: string): Promise<string>;
+  /** Get the wallet address */
   getAddress(): string;
+  /** Get network information */
   getNetwork(): { name: NetworkName; chainId: number; displayName: string };
+  /** Get the underlying provider */
   getProvider(): any;
+  /** True if using viem, false if using ethers */
   isViem: boolean;
+  /** Get underlying ethers wallet (only if isViem is false) */
   getWallet?(): any;
+  /** Get underlying viem wallet client (only if isViem is true) */
   getWalletClient?(): WalletClient;
+  /** Get viem public client for read operations (only if isViem is true) */
   getPublicClient?(): any;
 }
 
@@ -57,8 +67,8 @@ export function createSigner(walletClient: WalletClient): Promise<Signer>;
 // ============================================
 
 export interface PayerOptions {
-  /** Maximum amount to pay per request (e.g., '0.50') */
-  maxAmount?: string;
+  /** Maximum amount to pay per request (e.g., '0.50') - REQUIRED */
+  maxAmount: string;
   /** Custom facilitator URL */
   facilitator?: string;
   /** Verify payment with facilitator before sending (default: true) */
@@ -193,3 +203,10 @@ export function x402Next(
   config: NextRouteConfig,
   options?: PayeeOptions
 ): (req: any, res?: any) => Promise<any>;
+
+// ============================================
+// Constants
+// ============================================
+
+/** Default facilitator URL (https://x402.megalithlabs.ai) */
+export const DEFAULT_FACILITATOR: string;

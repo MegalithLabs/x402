@@ -215,7 +215,9 @@ async function createSignerFromPrivateKey(network, privateKey, options = {}) {
   const wallet = new ethers.Wallet(privateKey, provider);
 
   debug('ethers: Network=%s, Chain ID=%d, Address=%s', network, networkConfig.chainId, wallet.address);
-  debug('ethers: RPC URL=%s', rpcUrl);
+  // Redact RPC URL to avoid leaking API keys (many providers embed keys in URLs)
+  const redactedUrl = rpcUrl.replace(/([?&])(api[_-]?key|key|token|secret|password|auth)=[^&]+/gi, '$1$2=***');
+  debug('ethers: RPC URL=%s', redactedUrl);
 
   return {
     /**

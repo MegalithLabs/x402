@@ -5,7 +5,7 @@
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "test": "node examples/basic-payment.js"
+    "example": "node examples/basic-payment.js"
   },
   "keywords": [
     "x402",
@@ -42,7 +42,8 @@
     "payer.js",
     "payee.js",
     "examples/",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=16.0.0"
