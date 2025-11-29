@@ -638,10 +638,6 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
-### v1.1.0 (November 2025)
-- Added Base Mainnet and Base Sepolia support
-- Four networks now supported: BNB Chain and Base (mainnet + testnet)
-
 ### v1.0.0 (Current)
 - x402 Protocol v1 compliance
 - EIP-3009 and standard ERC-20 support
