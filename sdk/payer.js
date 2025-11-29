@@ -5,12 +5,15 @@
 
 const { ethers } = require('ethers');
 const {
+  createDebugLogger,
   DEFAULT_FACILITATOR,
   FACILITATOR_TIMEOUT_MS,
   base64Encode,
   TOKEN_ABI_ETHERS,
   TOKEN_ABI_VIEM
 } = require('./utils');
+
+const debug = createDebugLogger('payer');
 
 /**
  * Parse payment requirements from 402 response
@@ -99,34 +102,52 @@ function x402Fetch(fetch, signer, options = {}) {
   const shouldVerify = options.verify !== false; // Default to true
 
   return async function fetchWithPayment(url, init = {}) {
+    debug('Request to %s', url);
+
     // Make initial request
     let response = await fetch(url, init);
 
     // If not 402, return as-is
     if (response.status !== 402) {
+      debug('Response %d - no payment required', response.status);
       return response;
     }
+
+    debug('Got 402 Payment Required');
 
     // Parse payment requirements from x402 response
     const paymentRequired = await response.json();
     const requirements = parsePaymentRequirements(paymentRequired);
+    debug('Payment requirements: %O', {
+      scheme: requirements.scheme,
+      network: requirements.network,
+      asset: requirements.asset,
+      maxAmountRequired: requirements.maxAmountRequired
+    });
 
     // Get token decimals and validate amount
     const decimals = await getTokenDecimals(signer, requirements.asset);
     const amount = parseFloat(ethers.formatUnits(requirements.maxAmountRequired || '0', decimals));
+    debug('Amount: %s (max allowed: %s)', amount, maxAmount);
+
     if (amount > maxAmount) {
       throw new Error(`Payment amount ${amount} exceeds maxAmount ${maxAmount}`);
     }
 
     // Create payment
+    debug('Creating payment...');
     const payment = await createPayment(signer, requirements, facilitator);
+    debug('Payment created, signature: %s...', payment.payload.signature.slice(0, 20));
 
     // Verify payment before sending (optional but recommended)
     if (shouldVerify) {
+      debug('Verifying payment with facilitator: %s', facilitator);
       await verifyPayment(payment, requirements, facilitator);
+      debug('Payment verified successfully');
     }
 
     // Retry with payment header
+    debug('Retrying request with X-PAYMENT header');
     const paymentHeader = base64Encode(JSON.stringify(payment));
     const newInit = {
       ...init,
@@ -136,7 +157,9 @@ function x402Fetch(fetch, signer, options = {}) {
       }
     };
 
-    return await fetch(url, newInit);
+    const finalResponse = await fetch(url, newInit);
+    debug('Final response: %d', finalResponse.status);
+    return finalResponse;
   };
 }
 
@@ -169,25 +192,40 @@ function x402Axios(axiosInstance, signer, options = {}) {
         throw error;
       }
 
+      debug('Axios got 402 Payment Required for %s', error.config?.url);
+
       // Parse requirements from x402 response
       const requirements = parsePaymentRequirements(error.response.data);
+      debug('Payment requirements: %O', {
+        scheme: requirements.scheme,
+        network: requirements.network,
+        asset: requirements.asset,
+        maxAmountRequired: requirements.maxAmountRequired
+      });
 
       // Get token decimals and validate amount
       const decimals = await getTokenDecimals(signer, requirements.asset);
       const amount = parseFloat(ethers.formatUnits(requirements.maxAmountRequired || '0', decimals));
+      debug('Amount: %s (max allowed: %s)', amount, maxAmount);
+
       if (amount > maxAmount) {
         throw new Error(`Payment amount ${amount} exceeds maxAmount ${maxAmount}`);
       }
 
       // Create payment
+      debug('Creating payment...');
       const payment = await createPayment(signer, requirements, facilitator);
+      debug('Payment created');
 
       // Verify payment before sending (optional but recommended)
       if (shouldVerify) {
+        debug('Verifying payment with facilitator');
         await verifyPayment(payment, requirements, facilitator);
+        debug('Payment verified');
       }
 
       // Retry with payment header
+      debug('Retrying request with X-PAYMENT header');
       const paymentHeader = base64Encode(JSON.stringify(payment));
       const config = error.config;
       config.headers['X-PAYMENT'] = paymentHeader;

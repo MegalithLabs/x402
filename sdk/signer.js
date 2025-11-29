@@ -4,7 +4,9 @@
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
-const { NETWORKS } = require('./utils');
+const { NETWORKS, createDebugLogger } = require('./utils');
+
+const debug = createDebugLogger('signer');
 
 /**
  * Create a signer for x402 payments
@@ -46,10 +48,12 @@ const { NETWORKS } = require('./utils');
 async function createSigner(networkOrWalletClient, privateKey, options = {}) {
   // Detect if first argument is a viem WalletClient
   if (isViemWalletClient(networkOrWalletClient)) {
+    debug('Creating signer from viem WalletClient');
     return createSignerFromViemClient(networkOrWalletClient);
   }
 
   // Otherwise, treat as network + privateKey approach
+  debug('Creating signer from private key for network: %s', networkOrWalletClient);
   return createSignerFromPrivateKey(networkOrWalletClient, privateKey, options);
 }
 
@@ -97,6 +101,7 @@ async function createSignerFromViemClient(walletClient) {
 
   // Map viem chain to our network name
   const networkName = getNetworkNameFromChainId(chain.id);
+  debug('viem: Network=%s, Chain ID=%d, Address=%s', networkName, chain.id, account.address);
 
   // Create public client for read operations, using same transport as wallet client
   // This ensures we use the same RPC endpoint for consistency
@@ -199,6 +204,9 @@ async function createSignerFromPrivateKey(network, privateKey, options = {}) {
   const rpcUrl = options.rpcUrl || networkConfig.rpcUrl;
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(privateKey, provider);
+
+  debug('ethers: Network=%s, Chain ID=%d, Address=%s', network, networkConfig.chainId, wallet.address);
+  debug('ethers: RPC URL=%s', rpcUrl);
 
   return {
     /**

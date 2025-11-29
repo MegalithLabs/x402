@@ -2,6 +2,16 @@
 // Common functions and constants used across the SDK
 // https://megalithlabs.ai
 
+const debug = require('debug');
+
+// ============================================
+// Debug Loggers
+// ============================================
+// Enable with: DEBUG=x402:* node app.js
+// Or selectively: DEBUG=x402:payer,x402:payee node app.js
+
+const createDebugLogger = (namespace) => debug(`x402:${namespace}`);
+
 // ============================================
 // Constants
 // ============================================
@@ -210,6 +220,9 @@ const TOKEN_ABI_VIEM = [
 // ============================================
 
 module.exports = {
+  // Debug
+  createDebugLogger,
+
   // Constants
   DEFAULT_FACILITATOR,
   FACILITATOR_TIMEOUT_MS,

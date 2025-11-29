@@ -4,6 +4,7 @@
 
 const { ethers } = require('ethers');
 const {
+  createDebugLogger,
   DEFAULT_FACILITATOR,
   FACILITATOR_TIMEOUT_MS,
   NETWORKS,
@@ -11,6 +12,8 @@ const {
   parsePaymentHeader,
   TOKEN_ABI_ETHERS
 } = require('./utils');
+
+const debug = createDebugLogger('payee');
 
 // Cache for token decimals
 const decimalsCache = {};
@@ -119,11 +122,13 @@ function x402Express(payTo, routes, options = {}) {
       return next();
     }
 
+    debug('Express: Payment required for %s', req.path);
     const config = matchedRoute.config;
 
     // Check for payment header
     const paymentHeader = req.headers['x-payment'];
     if (!paymentHeader) {
+      debug('Express: No X-PAYMENT header, returning 402');
       // Return 402 with payment requirements (x402-compliant format)
       try {
         const x402Response = await buildPaymentRequirements(payTo, config, req.path);
@@ -136,12 +141,16 @@ function x402Express(payTo, routes, options = {}) {
     // Parse and validate payment header
     const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
     if (parseError) {
+      debug('Express: Invalid payment header: %s', parseError);
       return res.status(400).json({ error: parseError });
     }
+
+    debug('Express: Payment header validated, settling with facilitator');
 
     // Verify and settle payment
     try {
       const result = await settlePayment(payment, config, facilitator);
+      debug('Express: Settlement successful, txHash: %s', result.transactionHash || 'N/A');
 
       // Add payment response header
       res.setHeader('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
@@ -149,6 +158,7 @@ function x402Express(payTo, routes, options = {}) {
       // Continue to route handler
       next();
     } catch (error) {
+      debug('Express: Settlement failed: %s', error.message);
       try {
         const x402Response = await buildPaymentRequirements(payTo, config, req.path);
         x402Response.error = error.message;
@@ -185,11 +195,13 @@ function x402Hono(payTo, routes, options = {}) {
       return await next();
     }
 
+    debug('Hono: Payment required for %s', c.req.path);
     const config = matchedRoute.config;
 
     // Check for payment header
     const paymentHeader = c.req.header('x-payment');
     if (!paymentHeader) {
+      debug('Hono: No X-PAYMENT header, returning 402');
       try {
         const x402Response = await buildPaymentRequirements(payTo, config, c.req.path);
         return c.json(x402Response, 402);
@@ -201,17 +213,22 @@ function x402Hono(payTo, routes, options = {}) {
     // Parse and validate payment header
     const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
     if (parseError) {
+      debug('Hono: Invalid payment header: %s', parseError);
       return c.json({ error: parseError }, 400);
     }
+
+    debug('Hono: Payment header validated, settling with facilitator');
 
     // Verify and settle payment
     try {
       const result = await settlePayment(payment, config, facilitator);
+      debug('Hono: Settlement successful');
 
       c.header('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
 
       await next();
     } catch (error) {
+      debug('Hono: Settlement failed: %s', error.message);
       try {
         const x402Response = await buildPaymentRequirements(payTo, config, c.req.path);
         x402Response.error = error.message;
@@ -438,6 +455,8 @@ function findMatchingRoute(path, routePatterns) {
  * @private
  */
 async function settlePayment(payment, config, facilitator, timeoutMs = FACILITATOR_TIMEOUT_MS) {
+  debug('Settling payment with facilitator: %s', facilitator);
+
   // Build full payload for facilitator
   const maxAmountRequired = await toAtomicUnits(config.amount, config.asset, config.network);
 
@@ -451,6 +470,12 @@ async function settlePayment(payment, config, facilitator, timeoutMs = FACILITAT
       asset: config.asset
     }
   };
+
+  debug('Settlement payload: network=%s, asset=%s, amount=%s',
+    payload.paymentRequirements.network,
+    payload.paymentRequirements.asset,
+    payload.paymentRequirements.maxAmountRequired
+  );
 
   // Create abort controller for timeout
   const controller = new AbortController();
@@ -466,12 +491,16 @@ async function settlePayment(payment, config, facilitator, timeoutMs = FACILITAT
 
     if (!response.ok) {
       const error = await response.json();
+      debug('Settlement failed: %s', error.error || response.status);
       throw new Error(error.error || `Settlement failed: ${response.status}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    debug('Settlement response: %O', result);
+    return result;
   } catch (error) {
     if (error.name === 'AbortError') {
+      debug('Settlement timed out after %dms', timeoutMs);
       throw new Error(`Facilitator request timed out after ${timeoutMs}ms`);
     }
     throw error;
