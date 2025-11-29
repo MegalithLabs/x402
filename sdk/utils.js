@@ -131,6 +131,57 @@ function parsePaymentHeader(paymentHeader) {
 }
 
 // ============================================
+// Bounded Cache
+// ============================================
+
+/**
+ * Create a simple bounded cache with LRU-like eviction
+ * When cache exceeds maxSize, oldest entries are removed
+ * @param {number} maxSize - Maximum number of entries (default: 100)
+ * @returns {Object} Cache object with get, set, has methods
+ */
+function createBoundedCache(maxSize = 100) {
+  const cache = new Map();
+
+  return {
+    get(key) {
+      const value = cache.get(key);
+      if (value !== undefined) {
+        // Move to end (most recently used)
+        cache.delete(key);
+        cache.set(key, value);
+      }
+      return value;
+    },
+
+    set(key, value) {
+      // Remove if exists (to update position)
+      if (cache.has(key)) {
+        cache.delete(key);
+      }
+      // Evict oldest if at capacity
+      if (cache.size >= maxSize) {
+        const oldestKey = cache.keys().next().value;
+        cache.delete(oldestKey);
+      }
+      cache.set(key, value);
+    },
+
+    has(key) {
+      return cache.has(key);
+    },
+
+    size() {
+      return cache.size;
+    },
+
+    clear() {
+      cache.clear();
+    }
+  };
+}
+
+// ============================================
 // Token ABIs
 // ============================================
 
@@ -234,6 +285,9 @@ module.exports = {
 
   // Validation
   parsePaymentHeader,
+
+  // Cache
+  createBoundedCache,
 
   // ABIs
   TOKEN_ABI_ETHERS,

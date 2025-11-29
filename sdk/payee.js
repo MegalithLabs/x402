@@ -5,6 +5,7 @@
 const { ethers } = require('ethers');
 const {
   createDebugLogger,
+  createBoundedCache,
   DEFAULT_FACILITATOR,
   FACILITATOR_TIMEOUT_MS,
   NETWORKS,
@@ -15,11 +16,9 @@ const {
 
 const debug = createDebugLogger('payee');
 
-// Cache for token decimals
-const decimalsCache = {};
-
-// Cache for token metadata (name, version)
-const tokenMetadataCache = {};
+// Bounded caches to avoid repeated RPC calls (max 100 tokens each)
+const decimalsCache = createBoundedCache(100);
+const tokenMetadataCache = createBoundedCache(100);
 
 /**
  * Fetch token metadata (name, version) from blockchain (with caching)
@@ -28,8 +27,9 @@ const tokenMetadataCache = {};
  */
 async function getTokenMetadata(asset, network) {
   const cacheKey = `${network}:${asset}`;
-  if (tokenMetadataCache[cacheKey] !== undefined) {
-    return tokenMetadataCache[cacheKey];
+  const cached = tokenMetadataCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
   }
 
   const networkConfig = NETWORKS[network];
@@ -47,12 +47,14 @@ async function getTokenMetadata(asset, network) {
       token.version().catch(() => '1') // Default to '1' if not implemented
     ]);
 
-    tokenMetadataCache[cacheKey] = { name, version };
-    return tokenMetadataCache[cacheKey];
+    const result = { name, version };
+    tokenMetadataCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     // Fallback if both fail
-    tokenMetadataCache[cacheKey] = { name: 'Unknown Token', version: '1' };
-    return tokenMetadataCache[cacheKey];
+    const fallback = { name: 'Unknown Token', version: '1' };
+    tokenMetadataCache.set(cacheKey, fallback);
+    return fallback;
   }
 }
 
@@ -62,8 +64,9 @@ async function getTokenMetadata(asset, network) {
  */
 async function getTokenDecimals(asset, network) {
   const cacheKey = `${network}:${asset}`;
-  if (decimalsCache[cacheKey] !== undefined) {
-    return decimalsCache[cacheKey];
+  const cached = decimalsCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
   }
 
   const networkConfig = NETWORKS[network];
@@ -76,8 +79,9 @@ async function getTokenDecimals(asset, network) {
 
   try {
     const decimals = await token.decimals();
-    decimalsCache[cacheKey] = Number(decimals);
-    return decimalsCache[cacheKey];
+    const result = Number(decimals);
+    decimalsCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     throw new Error(`Failed to fetch decimals for token ${asset}: ${error.message}`);
   }
@@ -293,11 +297,14 @@ function x402Next(handler, config, options = {}) {
  * @private
  */
 async function handleAppRouter(req, handler, config, facilitator) {
+  const url = new URL(req.url);
+  debug('Next.js App Router: Payment required for %s', url.pathname);
+
   const paymentHeader = req.headers.get('x-payment');
 
   if (!paymentHeader) {
+    debug('Next.js App Router: No X-PAYMENT header, returning 402');
     try {
-      const url = new URL(req.url);
       const x402Response = await buildPaymentRequirements(config.payTo, config, url.pathname);
       return Response.json(x402Response, { status: 402 });
     } catch (error) {
@@ -308,11 +315,15 @@ async function handleAppRouter(req, handler, config, facilitator) {
   // Parse and validate payment header
   const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
   if (parseError) {
+    debug('Next.js App Router: Invalid payment header: %s', parseError);
     return Response.json({ error: parseError }, { status: 400 });
   }
 
+  debug('Next.js App Router: Payment header validated, settling with facilitator');
+
   try {
     const result = await settlePayment(payment, config, facilitator);
+    debug('Next.js App Router: Settlement successful');
 
     // Call original handler and add payment response header
     const response = await handler(req);
@@ -327,8 +338,8 @@ async function handleAppRouter(req, handler, config, facilitator) {
       headers: newHeaders
     });
   } catch (error) {
+    debug('Next.js App Router: Settlement failed: %s', error.message);
     try {
-      const url = new URL(req.url);
       const x402Response = await buildPaymentRequirements(config.payTo, config, url.pathname);
       x402Response.error = error.message;
       return Response.json(x402Response, { status: 402 });
@@ -343,9 +354,12 @@ async function handleAppRouter(req, handler, config, facilitator) {
  * @private
  */
 async function handlePagesRouter(req, res, handler, config, facilitator) {
+  debug('Next.js Pages Router: Payment required for %s', req.url);
+
   const paymentHeader = req.headers['x-payment'];
 
   if (!paymentHeader) {
+    debug('Next.js Pages Router: No X-PAYMENT header, returning 402');
     try {
       const x402Response = await buildPaymentRequirements(config.payTo, config, req.url);
       return res.status(402).json(x402Response);
@@ -357,16 +371,21 @@ async function handlePagesRouter(req, res, handler, config, facilitator) {
   // Parse and validate payment header
   const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
   if (parseError) {
+    debug('Next.js Pages Router: Invalid payment header: %s', parseError);
     return res.status(400).json({ error: parseError });
   }
 
+  debug('Next.js Pages Router: Payment header validated, settling with facilitator');
+
   try {
     const result = await settlePayment(payment, config, facilitator);
+    debug('Next.js Pages Router: Settlement successful');
 
     res.setHeader('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
 
     return await handler(req, res);
   } catch (error) {
+    debug('Next.js Pages Router: Settlement failed: %s', error.message);
     try {
       const x402Response = await buildPaymentRequirements(config.payTo, config, req.url);
       x402Response.error = error.message;
