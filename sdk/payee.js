@@ -164,7 +164,7 @@ function x402Express(payTo, routes, options = {}) {
 
     // Verify and settle payment
     try {
-      const result = await settlePayment(payment, config, facilitator);
+      const result = await settlePayment(payment, payTo, config, facilitator);
       debug('Express: Settlement successful, txHash: %s', result.transactionHash || 'N/A');
 
       // Add payment response header
@@ -239,7 +239,7 @@ function x402Hono(payTo, routes, options = {}) {
 
     // Verify and settle payment
     try {
-      const result = await settlePayment(payment, config, facilitator);
+      const result = await settlePayment(payment, payTo, config, facilitator);
       debug('Hono: Settlement successful');
 
       c.header('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
@@ -339,7 +339,7 @@ async function handleAppRouter(req, handler, config, facilitator) {
   debug('Next.js App Router: Payment header validated, settling with facilitator');
 
   try {
-    const result = await settlePayment(payment, config, facilitator);
+    const result = await settlePayment(payment, config.payTo, config, facilitator);
     debug('Next.js App Router: Settlement successful');
 
     // Call original handler and add payment response header
@@ -395,7 +395,7 @@ async function handlePagesRouter(req, res, handler, config, facilitator) {
   debug('Next.js Pages Router: Payment header validated, settling with facilitator');
 
   try {
-    const result = await settlePayment(payment, config, facilitator);
+    const result = await settlePayment(payment, config.payTo, config, facilitator);
     debug('Next.js Pages Router: Settlement successful');
 
     res.setHeader('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
@@ -498,7 +498,7 @@ function findMatchingRoute(path, routePatterns) {
  * Settle payment with facilitator
  * @private
  */
-async function settlePayment(payment, config, facilitator, timeoutMs = FACILITATOR_TIMEOUT_MS) {
+async function settlePayment(payment, payTo, config, facilitator, timeoutMs = FACILITATOR_TIMEOUT_MS) {
   debug('Settling payment with facilitator: %s', facilitator);
 
   // Build full payload for facilitator
@@ -511,7 +511,8 @@ async function settlePayment(payment, config, facilitator, timeoutMs = FACILITAT
       scheme: 'exact',
       network: payment.network || config.network,
       maxAmountRequired,
-      asset: config.asset
+      asset: config.asset,
+      payTo: payTo
     }
   };
 
