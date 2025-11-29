@@ -670,15 +670,11 @@ Currently no rate limits enforced. Fair use expected.
 
 ## Version History
 
-**v1.1.0 (Current)**
-- Added Base Mainnet and Base Sepolia support
-- Added `/supported` endpoint for network discovery
-- Token metadata (`name`, `version`) in `extra` field to avoid RPC calls
-- Improved error messages for facilitator timeouts
-
-**v1.0.0**
+**v1.0.0 (Current)**
 - x402 spec compliance
 - EIP-3009 and ERC-20 support via Stargate
 - Payload/requirements validation
 - Auto-detection for token types
-- BNB Chain mainnet and testnet support
+- Base Mainnet, Base Sepolia, BNB Chain mainnet and testnet support
+- `/supported` endpoint for network discovery
+- Token metadata (`name`, `version`) in `extra` field
