@@ -35,17 +35,18 @@ function base64Decode(str) {
 
 /**
  * Parse payment requirements from 402 response
- * Handles both old format ({ paymentRequirements: {...} }) and new x402 format ({ x402Version: 1, accepts: [...] })
+ * Expects x402 format: { x402Version: 1, accepts: [...] }
  * @private
  */
 function parsePaymentRequirements(responseData) {
-  // New x402 format: { x402Version: 1, accepts: [...] }
-  if (responseData.x402Version && Array.isArray(responseData.accepts) && responseData.accepts.length > 0) {
-    // Return the first accepted payment scheme
-    return responseData.accepts[0];
+  if (!responseData.x402Version) {
+    throw new Error('Invalid 402 response: missing x402Version');
   }
-  // Old format: { paymentRequirements: {...} } or just the requirements object
-  return responseData.paymentRequirements || responseData;
+  if (!Array.isArray(responseData.accepts) || responseData.accepts.length === 0) {
+    throw new Error('Invalid 402 response: missing or empty accepts array');
+  }
+  // Return the first accepted payment scheme
+  return responseData.accepts[0];
 }
 
 /**
@@ -190,7 +191,7 @@ function x402Fetch(fetch, signer, options = {}) {
       return response;
     }
 
-    // Parse payment requirements from response (handles both old and new x402 format)
+    // Parse payment requirements from x402 response
     const paymentRequired = await response.json();
     const requirements = parsePaymentRequirements(paymentRequired);
 
@@ -252,7 +253,7 @@ function x402Axios(axiosInstance, signer, options = {}) {
         throw error;
       }
 
-      // Parse requirements (handles both old and new x402 format)
+      // Parse requirements from x402 response
       const requirements = parsePaymentRequirements(error.response.data);
 
       // Get token decimals and validate amount
