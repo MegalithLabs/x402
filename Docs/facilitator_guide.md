@@ -23,10 +23,12 @@ The facilitator acts as a trusted intermediary that:
 
 | Network | Chain ID | Name |
 |---------|----------|------|
+| `base` | 8453 | Base Mainnet |
+| `base-sepolia` | 84532 | Base Sepolia Testnet |
 | `bsc` | 56 | BNB Chain Mainnet |
 | `bsc-testnet` | 97 | BNB Chain Testnet |
 
-Always use **text network names** (e.g., `"bsc"`), not numeric IDs. More networks coming soon.
+Always use **text network names** (e.g., `"base"`, `"bsc"`), not numeric chain IDs.
 
 ---
 
@@ -45,7 +47,7 @@ Verifies a payment signature without settling it on-chain.
   "paymentPayload": {
     "x402Version": 1,                         // Always 1
     "scheme": "exact",                        // Always "exact"
-    "network": "bsc",                         // "bsc" or "bsc-testnet"
+    "network": "base",                        // Network name (see Supported Networks)
     "payload": {
       "signature": "0x...",                   // Your EIP-712 signature
       "authorization": {
@@ -60,17 +62,18 @@ Verifies a payment signature without settling it on-chain.
   },
   "paymentRequirements": {
     "scheme": "exact",                        // Must match payload
-    "network": "bsc",                         // Must match payload
+    "network": "base",                        // Must match payload
     "maxAmountRequired": "1000000",           // Maximum amount (must match or be less than value)
-    "resource": "...",                        // What's being paid for - URL, file, etc.
+    "resource": "/api/premium",               // What's being paid for - URL, file, etc.
     "description": "Payment for data access", // Human-readable description
     "mimeType": "application/json",           // Response content type
     "outputSchema": { "data": "string" },     // Expected response schema
     "payTo": "0xRecipientAddress",            // Must match authorization.to
     "maxTimeoutSeconds": 30,                  // Settlement timeout
     "asset": "0xTokenAddress",                // Token contract address
-    "extra": {                                // Additional metadata (optional)
-      "gasLimit": "200000"
+    "extra": {                                // Token metadata for EIP-712 domain (optional)
+      "name": "USD Coin",                     // Token name (avoids RPC call)
+      "version": "2"                          // Token version (avoids RPC call)
     }
   }
 }
@@ -121,6 +124,44 @@ Verifies and settles a payment on-chain.
 
 ---
 
+### GET `/supported`
+
+Lists supported scheme/network combinations.
+
+**Use case:** Discover which networks are available before making payment requests.
+
+**Response:**
+```json
+{
+  "supportedNetworks": [
+    {
+      "network": "base",
+      "schemes": ["exact"],
+      "autoDetect": true
+    },
+    {
+      "network": "base-sepolia",
+      "schemes": ["exact"],
+      "autoDetect": true
+    },
+    {
+      "network": "bsc",
+      "schemes": ["exact"],
+      "autoDetect": true
+    },
+    {
+      "network": "bsc-testnet",
+      "schemes": ["exact"],
+      "autoDetect": true
+    }
+  ]
+}
+```
+
+The `autoDetect` field indicates the facilitator can automatically detect whether a token uses EIP-3009 or requires the Stargate proxy.
+
+---
+
 ### GET `/health`
 
 Health check and capability discovery.
@@ -134,9 +175,19 @@ Health check and capability discovery.
   "spec": "https://x402.org",
   "supportedSchemes": ["exact"],
   "networks": {
-    "bsc": {
-      "name": "BNB Chain Mainnet",
-      "chainId": 56,
+    "base": {
+      "name": "Base Mainnet",
+      "chainId": 8453,
+      "rpcConfigured": true,
+      "keyConfigured": true,
+      "facilitatorContract": "0x...",
+      "supportsEIP3009": true,
+      "supportsExact": true,
+      "supportsAutoDetection": true
+    },
+    "base-sepolia": {
+      "name": "Base Sepolia",
+      "chainId": 84532,
       "rpcConfigured": true,
       "keyConfigured": true,
       "facilitatorContract": "0x...",
@@ -161,11 +212,17 @@ Returns Stargate contract addresses for each network.
 **Response:**
 ```json
 {
-  "bsc": {
-    "stargate": "0x40200001004B5110333e4De8179426971Efd034A",
+  "base": {
+    "stargate": "0x...",
     "version": "1.0.0",
-    "network": "BNB Chain Mainnet",
-    "chainId": 56
+    "network": "Base Mainnet",
+    "chainId": 8453
+  },
+  "base-sepolia": {
+    "stargate": "0x...",
+    "version": "1.0.0",
+    "network": "Base Sepolia",
+    "chainId": 84532
   }
 }
 ```
@@ -188,7 +245,7 @@ Returns Stargate contract addresses for each network.
 |-------|------|-------------|
 | `x402Version` | number | Protocol version (always `1`) |
 | `scheme` | string | Payment scheme (always `"exact"`) |
-| `network` | string | Network name (`"bsc"`, `"bsc-testnet"`) |
+| `network` | string | Network name (`"base"`, `"base-sepolia"`, `"bsc"`, `"bsc-testnet"`) |
 | `payload.signature` | string | Full EIP-712 signature as hex string |
 | `payload.authorization.from` | address | Payer address |
 | `payload.authorization.to` | address | Recipient address |
@@ -211,7 +268,7 @@ Returns Stargate contract addresses for each network.
 | `payTo` | address | Yes | Must match authorization.to |
 | `maxTimeoutSeconds` | number | Yes | Settlement timeout |
 | `asset` | address | Yes | Token contract address |
-| `extra` | object | No | Additional metadata |
+| `extra` | object | No | Token metadata (`name`, `version`) for EIP-712 domain - avoids RPC calls |
 
 ---
 
@@ -243,7 +300,7 @@ The facilitator supports two types of tokens with different requirements:
 {
   name: "USD Coin",           // Token's name
   version: "2",               // Token's version
-  chainId: 56,
+  chainId: 8453,              // Base mainnet (or your target chain)
   verifyingContract: "0x..."  // Token address
 }
 ```
@@ -289,8 +346,8 @@ The facilitator supports two types of tokens with different requirements:
 {
   name: "Megalith",           // Stargate name
   version: "1",
-  chainId: 56,
-  verifyingContract: "0x..."  // Stargate address
+  chainId: 8453,              // Base mainnet (or your target chain)
+  verifyingContract: "0x..."  // Stargate address (from /contracts)
 }
 ```
 
@@ -440,16 +497,19 @@ await token.approve(stargateAddress, ethers.MaxUint256);
 
 ## Integration Examples
 
+> **Tip:** For a simpler integration experience, use the [@megalithlabs/x402 SDK](../sdk/README.md) which handles all the details below automatically.
+
 ### Creating a Payment (Client Side)
 
 ```javascript
 const { ethers } = require('ethers');
 
 // 1. Connect to network
-const provider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org/');
+const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
 const wallet = new ethers.Wallet(privateKey, provider);
 
 // 2. Get token and amount
+const tokenAddress = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
 const token = new ethers.Contract(tokenAddress, abi, provider);
 const amount = ethers.parseUnits('1.0', 6); // 1 USDC
 
@@ -461,14 +521,14 @@ const authorization = {
   value: amount,
   validAfter: now - 60,
   validBefore: now + 3600,
-  nonce: ethers.randomBytes(32) // EIP-3009
+  nonce: ethers.hexlify(ethers.randomBytes(32)) // EIP-3009 random nonce
 };
 
 // 4. Sign with EIP-712
 const domain = {
   name: await token.name(),
   version: await token.version(),
-  chainId: 56,
+  chainId: 8453, // Base mainnet
   verifyingContract: tokenAddress
 };
 
@@ -491,7 +551,7 @@ const payload = {
   paymentPayload: {
     x402Version: 1,
     scheme: "exact",
-    network: "bsc",
+    network: "base",
     payload: {
       signature,
       authorization
@@ -499,7 +559,7 @@ const payload = {
   },
   paymentRequirements: {
     scheme: "exact",
-    network: "bsc",
+    network: "base",
     maxAmountRequired: amount.toString(),
     resource: "/api/data",
     description: "API access payment",
@@ -508,7 +568,10 @@ const payload = {
     payTo: recipientAddress,
     maxTimeoutSeconds: 30,
     asset: tokenAddress,
-    extra: { gasLimit: "200000" }
+    extra: {
+      name: "USD Coin",  // Token metadata
+      version: "2"
+    }
   }
 };
 
@@ -582,11 +645,11 @@ app.get('/api/premium-data', async (req, res) => {
 
 ### For Both
 
-1. **Use text network names** (`"bsc"`) not numbers (`56`)
+1. **Use text network names** (`"base"`, `"bsc"`) not chain IDs (`8453`, `56`)
 2. **Keep paymentRequirements consistent** with paymentPayload
 3. **Handle errors gracefully** with clear messages
 4. **Monitor /health endpoint** for facilitator status
-5. **Test on testnet first** before mainnet integration
+5. **Test on testnet first** (`base-sepolia`, `bsc-testnet`) before mainnet
 
 ---
 
@@ -607,7 +670,13 @@ Currently no rate limits enforced. Fair use expected.
 
 ## Version History
 
-**v1.0.0 (Current)**
+**v1.1.0 (Current)**
+- Added Base Mainnet and Base Sepolia support
+- Added `/supported` endpoint for network discovery
+- Token metadata (`name`, `version`) in `extra` field to avoid RPC calls
+- Improved error messages for facilitator timeouts
+
+**v1.0.0**
 - x402 spec compliance
 - EIP-3009 and ERC-20 support via Stargate
 - Payload/requirements validation
