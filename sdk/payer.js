@@ -71,7 +71,14 @@ async function verifyPayment(payment, requirements, facilitator, timeoutMs = FAC
     return await response.json();
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error(`Facilitator verify request timed out after ${timeoutMs}ms`);
+      const err = new Error(`Facilitator verify request timed out after ${timeoutMs}ms. The facilitator may be temporarily unavailable - please retry.`);
+      err.code = 'FACILITATOR_TIMEOUT';
+      err.retryable = true;
+      throw err;
+    }
+    // Network errors are typically retryable
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.cause?.code === 'ECONNREFUSED') {
+      error.retryable = true;
     }
     throw error;
   } finally {
@@ -716,7 +723,14 @@ async function fetchStargateAddress(network, facilitator, timeoutMs = FACILITATO
     return contracts[network].stargate;
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error(`Facilitator request timed out after ${timeoutMs}ms`);
+      const err = new Error(`Facilitator request timed out after ${timeoutMs}ms. The facilitator may be temporarily unavailable - please retry.`);
+      err.code = 'FACILITATOR_TIMEOUT';
+      err.retryable = true;
+      throw err;
+    }
+    // Network errors are typically retryable
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.cause?.code === 'ECONNREFUSED') {
+      error.retryable = true;
     }
     throw error;
   } finally {
