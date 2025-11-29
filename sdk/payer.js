@@ -4,34 +4,13 @@
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
-
-// Default facilitator
-const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
-
-// Default timeout for facilitator requests (10 seconds)
-const FACILITATOR_TIMEOUT_MS = 10000;
-
-/**
- * Cross-platform base64 encode (works in Node.js and browsers)
- * @private
- */
-function base64Encode(str) {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(str).toString('base64');
-  }
-  return btoa(str);
-}
-
-/**
- * Cross-platform base64 decode (works in Node.js and browsers)
- * @private
- */
-function base64Decode(str) {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(str, 'base64').toString();
-  }
-  return atob(str);
-}
+const {
+  DEFAULT_FACILITATOR,
+  FACILITATOR_TIMEOUT_MS,
+  base64Encode,
+  TOKEN_ABI_ETHERS,
+  TOKEN_ABI_VIEM
+} = require('./utils');
 
 /**
  * Parse payment requirements from 402 response
@@ -96,70 +75,7 @@ async function verifyPayment(payment, requirements, facilitator, timeoutMs = FAC
   }
 }
 
-// Token ABI for getting details (ethers format)
-const TOKEN_ABI = [
-  'function name() view returns (string)',
-  'function version() view returns (string)',
-  'function decimals() view returns (uint8)',
-  'function authorizationState(address, bytes32) view returns (bool)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)'
-];
-
-// Token ABI for viem
-const VIEM_TOKEN_ABI = [
-  {
-    name: 'name',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'string' }]
-  },
-  {
-    name: 'version',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'string' }]
-  },
-  {
-    name: 'decimals',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'uint8' }]
-  },
-  {
-    name: 'authorizationState',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'authorizer', type: 'address' },
-      { name: 'nonce', type: 'bytes32' }
-    ],
-    outputs: [{ type: 'bool' }]
-  },
-  {
-    name: 'allowance',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'owner', type: 'address' },
-      { name: 'spender', type: 'address' }
-    ],
-    outputs: [{ type: 'uint256' }]
-  },
-  {
-    name: 'approve',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'spender', type: 'address' },
-      { name: 'amount', type: 'uint256' }
-    ],
-    outputs: [{ type: 'bool' }]
-  }
-];
+// Token ABIs are imported from utils.js as TOKEN_ABI_ETHERS and TOKEN_ABI_VIEM
 
 /**
  * Wrap fetch to automatically handle 402 Payment Required responses
@@ -436,7 +352,7 @@ async function createPayment(signer, requirements, facilitator) {
  */
 async function getTokenDetailsEthers(signer, tokenAddress, address) {
   const provider = signer.getProvider();
-  const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
+  const token = new ethers.Contract(tokenAddress, TOKEN_ABI_ETHERS, provider);
 
   let tokenName, tokenVersion;
 
@@ -477,7 +393,7 @@ async function getTokenDetailsViem(signer, tokenAddress, address) {
   try {
     tokenName = await publicClient.readContract({
       address: tokenAddress,
-      abi: VIEM_TOKEN_ABI,
+      abi: TOKEN_ABI_VIEM,
       functionName: 'name'
     });
   } catch (e) {
@@ -487,7 +403,7 @@ async function getTokenDetailsViem(signer, tokenAddress, address) {
   try {
     tokenVersion = await publicClient.readContract({
       address: tokenAddress,
-      abi: VIEM_TOKEN_ABI,
+      abi: TOKEN_ABI_VIEM,
       functionName: 'version'
     });
   } catch (e) {
@@ -500,7 +416,7 @@ async function getTokenDetailsViem(signer, tokenAddress, address) {
     const testNonce = generateRandomBytes32();
     await publicClient.readContract({
       address: tokenAddress,
-      abi: VIEM_TOKEN_ABI,
+      abi: TOKEN_ABI_VIEM,
       functionName: 'authorizationState',
       args: [address, testNonce]
     });
@@ -529,12 +445,12 @@ async function getTokenDecimals(signer, tokenAddress) {
     const publicClient = signer.getPublicClient();
     decimals = await publicClient.readContract({
       address: tokenAddress,
-      abi: VIEM_TOKEN_ABI,
+      abi: TOKEN_ABI_VIEM,
       functionName: 'decimals'
     });
   } else {
     const provider = signer.getProvider();
-    const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
+    const token = new ethers.Contract(tokenAddress, TOKEN_ABI_ETHERS, provider);
     decimals = await token.decimals();
   }
 
@@ -551,13 +467,13 @@ async function checkAllowance(signer, tokenAddress, ownerAddress, spenderAddress
     const publicClient = signer.getPublicClient();
     return await publicClient.readContract({
       address: tokenAddress,
-      abi: VIEM_TOKEN_ABI,
+      abi: TOKEN_ABI_VIEM,
       functionName: 'allowance',
       args: [ownerAddress, spenderAddress]
     });
   } else {
     const provider = signer.getProvider();
-    const token = new ethers.Contract(tokenAddress, TOKEN_ABI, provider);
+    const token = new ethers.Contract(tokenAddress, TOKEN_ABI_ETHERS, provider);
     return await token.allowance(ownerAddress, spenderAddress);
   }
 }
@@ -599,7 +515,7 @@ async function approveToken(signer, tokenAddress, options = {}) {
 
     const hash = await walletClient.writeContract({
       address: tokenAddress,
-      abi: VIEM_TOKEN_ABI,
+      abi: TOKEN_ABI_VIEM,
       functionName: 'approve',
       args: [stargateAddress, amount]
     });
@@ -616,7 +532,7 @@ async function approveToken(signer, tokenAddress, options = {}) {
   } else {
     // ethers approach
     const wallet = signer.getWallet();
-    const token = new ethers.Contract(tokenAddress, TOKEN_ABI, wallet);
+    const token = new ethers.Contract(tokenAddress, TOKEN_ABI_ETHERS, wallet);
 
     const tx = await token.approve(stargateAddress, amount);
     const receipt = await tx.wait();

@@ -14,6 +14,14 @@ Learn more: [x402.org](https://x402.org) | [Megalith Labs](https://megalithlabs.
 npm install @megalithlabs/x402
 ```
 
+**For viem WalletClient support** (hardware wallets, WalletConnect, etc.):
+
+```bash
+npm install @megalithlabs/x402 viem
+```
+
+> **Note:** viem is an optional peer dependency. Only install it if you need WalletClient support for hardware wallets, WalletConnect, or other advanced wallet integrations. The simple approach using private keys works with just ethers (included by default).
+
 ---
 
 ## Quick Start
@@ -37,6 +45,8 @@ const data = await response.json();
 ```
 
 **Advanced approach (viem wallet client):**
+
+> **Requires viem:** Run `npm install viem` first.
 
 ```javascript
 const { createSigner, x402Fetch } = require('@megalithlabs/x402');
@@ -106,6 +116,8 @@ const signer = await createSigner('base', '0xabc123...');
 | `privateKey` | string | Wallet private key (hex string) |
 
 **Advanced approach (viem wallet client):**
+
+> **Requires viem:** Run `npm install viem` first.
 
 ```javascript
 const { createWalletClient, http } = require('viem');

@@ -4,30 +4,7 @@
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
-
-// Network configurations with env var overrides
-const NETWORKS = {
-  'base': {
-    name: 'Base Mainnet',
-    chainId: 8453,
-    rpcUrl: process.env.RPC_BASE || 'https://mainnet.base.org/'
-  },
-  'base-sepolia': {
-    name: 'Base Sepolia',
-    chainId: 84532,
-    rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
-  },
-  'bsc': {
-    name: 'BNB Chain Mainnet',
-    chainId: 56,
-    rpcUrl: process.env.RPC_BSC || 'https://bsc-dataseed.binance.org/'
-  },
-  'bsc-testnet': {
-    name: 'BNB Chain Testnet',
-    chainId: 97,
-    rpcUrl: process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
-  }
-};
+const { NETWORKS } = require('./utils');
 
 /**
  * Create a signer for x402 payments
@@ -95,7 +72,17 @@ function isViemWalletClient(obj) {
  * @private
  */
 async function createSignerFromViemClient(walletClient) {
-  const { createPublicClient, http } = require('viem');
+  // Lazy-load viem - it's an optional peer dependency
+  let viem;
+  try {
+    viem = require('viem');
+  } catch (e) {
+    throw new Error(
+      'viem is required for WalletClient support but is not installed. ' +
+      'Install it with: npm install viem'
+    );
+  }
+  const { createPublicClient, http } = viem;
 
   const account = walletClient.account;
   const chain = walletClient.chain;

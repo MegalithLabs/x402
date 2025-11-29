@@ -3,46 +3,14 @@
 // https://megalithlabs.ai
 
 const { ethers } = require('ethers');
-
-// Default facilitator
-const DEFAULT_FACILITATOR = 'https://x402.megalithlabs.ai';
-
-// Network RPC URLs for fetching token decimals (with env var overrides)
-const NETWORK_RPC = {
-  'base': process.env.RPC_BASE || 'https://mainnet.base.org/',
-  'base-sepolia': process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/',
-  'bsc': process.env.RPC_BSC || 'https://bsc-dataseed.binance.org/',
-  'bsc-testnet': process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
-};
-
-/**
- * Cross-platform base64 encode (works in Node.js and browsers)
- * @private
- */
-function base64Encode(str) {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(str).toString('base64');
-  }
-  return btoa(str);
-}
-
-/**
- * Cross-platform base64 decode (works in Node.js and browsers)
- * @private
- */
-function base64Decode(str) {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(str, 'base64').toString();
-  }
-  return atob(str);
-}
-
-// Token ABI for decimals, name, and version
-const TOKEN_ABI = [
-  'function decimals() view returns (uint8)',
-  'function name() view returns (string)',
-  'function version() view returns (string)'
-];
+const {
+  DEFAULT_FACILITATOR,
+  FACILITATOR_TIMEOUT_MS,
+  NETWORKS,
+  base64Encode,
+  parsePaymentHeader,
+  TOKEN_ABI_ETHERS
+} = require('./utils');
 
 // Cache for token decimals
 const decimalsCache = {};
@@ -61,13 +29,13 @@ async function getTokenMetadata(asset, network) {
     return tokenMetadataCache[cacheKey];
   }
 
-  const rpcUrl = NETWORK_RPC[network];
-  if (!rpcUrl) {
-    throw new Error(`Unknown network: ${network}`);
+  const networkConfig = NETWORKS[network];
+  if (!networkConfig) {
+    throw new Error(`Unknown network: ${network}. Supported: ${Object.keys(NETWORKS).join(', ')}`);
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const token = new ethers.Contract(asset, TOKEN_ABI, provider);
+  const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+  const token = new ethers.Contract(asset, TOKEN_ABI_ETHERS, provider);
 
   try {
     // Fetch name and version in parallel
@@ -95,13 +63,13 @@ async function getTokenDecimals(asset, network) {
     return decimalsCache[cacheKey];
   }
 
-  const rpcUrl = NETWORK_RPC[network];
-  if (!rpcUrl) {
-    throw new Error(`Unknown network: ${network}`);
+  const networkConfig = NETWORKS[network];
+  if (!networkConfig) {
+    throw new Error(`Unknown network: ${network}. Supported: ${Object.keys(NETWORKS).join(', ')}`);
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const token = new ethers.Contract(asset, TOKEN_ABI, provider);
+  const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+  const token = new ethers.Contract(asset, TOKEN_ABI_ETHERS, provider);
 
   try {
     const decimals = await token.decimals();
@@ -165,9 +133,14 @@ function x402Express(payTo, routes, options = {}) {
       }
     }
 
+    // Parse and validate payment header
+    const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
+    if (parseError) {
+      return res.status(400).json({ error: parseError });
+    }
+
     // Verify and settle payment
     try {
-      const payment = JSON.parse(base64Decode(paymentHeader));
       const result = await settlePayment(payment, config, facilitator);
 
       // Add payment response header
@@ -225,9 +198,14 @@ function x402Hono(payTo, routes, options = {}) {
       }
     }
 
+    // Parse and validate payment header
+    const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
+    if (parseError) {
+      return c.json({ error: parseError }, 400);
+    }
+
     // Verify and settle payment
     try {
-      const payment = JSON.parse(base64Decode(paymentHeader));
       const result = await settlePayment(payment, config, facilitator);
 
       c.header('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
@@ -310,8 +288,13 @@ async function handleAppRouter(req, handler, config, facilitator) {
     }
   }
 
+  // Parse and validate payment header
+  const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
+  if (parseError) {
+    return Response.json({ error: parseError }, { status: 400 });
+  }
+
   try {
-    const payment = JSON.parse(base64Decode(paymentHeader));
     const result = await settlePayment(payment, config, facilitator);
 
     // Call original handler and add payment response header
@@ -354,8 +337,13 @@ async function handlePagesRouter(req, res, handler, config, facilitator) {
     }
   }
 
+  // Parse and validate payment header
+  const { payment, error: parseError } = parsePaymentHeader(paymentHeader);
+  if (parseError) {
+    return res.status(400).json({ error: parseError });
+  }
+
   try {
-    const payment = JSON.parse(base64Decode(paymentHeader));
     const result = await settlePayment(payment, config, facilitator);
 
     res.setHeader('X-PAYMENT-RESPONSE', base64Encode(JSON.stringify(result)));
@@ -444,9 +432,6 @@ function findMatchingRoute(path, routePatterns) {
   }
   return null;
 }
-
-// Default timeout for facilitator requests (10 seconds)
-const FACILITATOR_TIMEOUT_MS = 10000;
 
 /**
  * Settle payment with facilitator
