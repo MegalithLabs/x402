@@ -49,7 +49,8 @@ async function verifyPayment(payment, requirements, facilitator, timeoutMs = FAC
         scheme: requirements.scheme || 'exact',
         network: requirements.network,
         maxAmountRequired: requirements.maxAmountRequired,
-        asset: requirements.asset
+        asset: requirements.asset,
+        payTo: requirements.payTo
       }
     };
 
