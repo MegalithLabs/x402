@@ -1,6 +1,6 @@
 {
   "name": "@megalithlabs/x402",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "JavaScript SDK for x402 payments - pay and charge for APIs with stablecoins",
   "main": "index.js",
   "types": "index.d.ts",
