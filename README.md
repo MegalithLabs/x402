@@ -85,10 +85,10 @@ app.get('/api/premium', (req, res) => {
 
 | Network | Chain ID | Status |
 |---------|----------|--------|
-| **Base Mainnet** | 8453 | Production |
-| **Base Sepolia** | 84532 | Testnet |
 | **BNB Chain Mainnet** | 56 | Production |
 | **BNB Chain Testnet** | 97 | Testnet |
+| **Base Mainnet** | 8453 | Production |
+| **Base Sepolia** | 84532 | Testnet |
 
 ---
 
