@@ -22,25 +22,25 @@ const debug = createDebugLogger('signer');
  * @returns {Promise<Object>} Signer object
  *
  * @example Simple approach (private key)
- * const signer = await createSigner('base', '0xabc123...');
+ * const signer = await createSigner('bsc', '0xabc123...');
  *
  * @example With custom RPC
- * const signer = await createSigner('base', '0xabc123...', {
+ * const signer = await createSigner('bsc', '0xabc123...', {
  *   rpcUrl: 'https://my-private-node.com'
  * });
  *
  * @example Using environment variables
- * // Set RPC_BASE=https://my-private-node.com in .env
- * const signer = await createSigner('base', '0xabc123...');
+ * // Set RPC_BSC=https://my-private-node.com in .env
+ * const signer = await createSigner('bsc', '0xabc123...');
  *
  * @example Advanced approach (viem wallet client)
  * import { createWalletClient, http } from 'viem';
- * import { base } from 'viem/chains';
+ * import { bsc } from 'viem/chains';
  * import { privateKeyToAccount } from 'viem/accounts';
  *
  * const walletClient = createWalletClient({
  *   account: privateKeyToAccount('0x...'),
- *   chain: base,
+ *   chain: bsc,
  *   transport: http('https://my-private-node.com')  // Custom RPC here
  * });
  * const signer = await createSigner(walletClient);

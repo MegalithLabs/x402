@@ -43,7 +43,7 @@ const NETWORKS = {
     name: 'Base Sepolia',
     chainId: 84532,
     rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
-  }
+  }  
 };
 
 // ============================================
