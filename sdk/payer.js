@@ -14,6 +14,12 @@ const {
   TOKEN_ABI_VIEM
 } = require('./utils');
 
+// Nonce cache to prevent race conditions with concurrent requests
+// Key: `${userAddress}-${tokenAddress}`
+// Value: { nonce: number, timestamp: number }
+const nonceCache = new Map();
+const NONCE_CACHE_TTL = 60000; // 1 minute
+
 const debug = createDebugLogger('payer');
 
 /**
@@ -663,9 +669,13 @@ async function approveToken(signer, tokenAddress, options = {}) {
  * @private
  */
 async function getStargateNonce(signer, stargateAddress, userAddress, tokenAddress) {
+  const cacheKey = `${userAddress.toLowerCase()}-${tokenAddress.toLowerCase()}`;
+  let chainNonce;
+
+  // Fetch nonce from chain
   if (signer.isViem) {
     const publicClient = signer.getPublicClient();
-    return await publicClient.readContract({
+    const result = await publicClient.readContract({
       address: stargateAddress,
       abi: [{
         name: 'getNonce',
@@ -680,12 +690,39 @@ async function getStargateNonce(signer, stargateAddress, userAddress, tokenAddre
       functionName: 'getNonce',
       args: [userAddress, tokenAddress]
     });
+    chainNonce = Number(result);
   } else {
     const provider = signer.getProvider();
     const stargateABI = ['function getNonce(address user, address token) view returns (uint256)'];
     const stargate = new ethers.Contract(stargateAddress, stargateABI, provider);
-    return await stargate.getNonce(userAddress, tokenAddress);
+    const result = await stargate.getNonce(userAddress, tokenAddress);
+    chainNonce = Number(result);
   }
+
+  // Check cache
+  const now = Date.now();
+  const cached = nonceCache.get(cacheKey);
+  
+  let nextNonce;
+  
+  if (cached && (now - cached.timestamp < NONCE_CACHE_TTL) && cached.nonce >= chainNonce) {
+    // If we have a cached nonce that is newer or equal to chain nonce, increment it
+    nextNonce = cached.nonce + 1;
+    debug('Using cached nonce: %d (chain: %d)', nextNonce, chainNonce);
+  } else {
+    // Otherwise use chain nonce
+    nextNonce = chainNonce;
+    debug('Using chain nonce: %d', nextNonce);
+  }
+
+  // Update cache
+  nonceCache.set(cacheKey, {
+    nonce: nextNonce,
+    timestamp: now
+  });
+
+  // Return as BigInt for compatibility
+  return BigInt(nextNonce);
 }
 
 /**

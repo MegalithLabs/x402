@@ -331,15 +331,17 @@ contract MegalithStargate is Ownable2Step, ReentrancyGuard, Pausable {
             IERC20(token).safeTransferFrom(from, to, value);
             emit ERC20Settlement(token, from, to, value, nonce, 0, currentTime, msg.sender);
         } else {
-            // Fee path: calculate and collect fee
+            // Fee path: calculate fee
             uint256 fee = (value * feePercentage) / 10000;
             uint256 amountAfterFee = value - fee;
             
-            // Transfer to recipient
-            IERC20(token).safeTransferFrom(from, to, amountAfterFee);
+            // Transfer total amount to this contract first
+            IERC20(token).safeTransferFrom(from, address(this), value);
             
-            // Collect fee
-            IERC20(token).safeTransferFrom(from, address(this), fee);
+            // Transfer remainder to recipient
+            IERC20(token).safeTransfer(to, amountAfterFee);
+            
+            // Update collected fees (fee stays in contract)
             collectedFees[token] += fee;
             
             emit ERC20Settlement(token, from, to, value, nonce, fee, currentTime, msg.sender);
