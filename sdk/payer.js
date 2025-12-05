@@ -101,7 +101,7 @@ async function verifyPayment(payment, requirements, facilitator, timeoutMs = FAC
  * @returns {Function} Wrapped fetch function
  *
  * @example
- * const signer = await createSigner('base', privateKey);
+ * const signer = await createSigner('bsc', privateKey);
  * const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
  * const response = await fetchWithPay('https://api.example.com/data');
  */
@@ -187,7 +187,7 @@ function x402Fetch(fetch, signer, options = {}) {
  * @returns {Object} Axios instance with payment interceptor
  *
  * @example
- * const signer = await createSigner('base', privateKey);
+ * const signer = await createSigner('bsc', privateKey);
  * const axiosWithPay = x402Axios(axios.create(), signer, { maxAmount: '0.50' });
  * const response = await axiosWithPay.get('https://api.example.com/data');
  */
