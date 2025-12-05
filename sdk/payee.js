@@ -108,7 +108,7 @@ async function toAtomicUnits(amount, asset, network) {
  * Express middleware to require x402 payment for routes
  *
  * @param {string} payTo - Address to receive payments
- * @param {Object} routes - Route configuration { '/path': { amount: '0.01', asset: '0x...', network: 'base' } }
+ * @param {Object} routes - Route configuration { '/path': { amount: '0.01', asset: '0x...', network: 'bsc' } }
  * @param {Object} options - Options
  * @param {string} options.facilitator - Custom facilitator URL
  * @returns {Function} Express middleware
@@ -118,8 +118,8 @@ async function toAtomicUnits(amount, asset, network) {
  * app.use(x402Express('0xYourAddress', {
  *   '/api/premium': {
  *     amount: '0.01',           // 0.01 tokens (human-readable)
- *     asset: '0x833589...',     // USDC on Base
- *     network: 'base'
+ *     asset: '0x...',     // token on Bsc
+ *     network: 'bsc'
  *   }
  * }));
  */
@@ -196,7 +196,7 @@ function x402Express(payTo, routes, options = {}) {
  * @example
  * const app = new Hono();
  * app.use('*', x402Hono('0xYourAddress', {
- *   '/api/premium': { amount: '0.01', asset: '0x...', network: 'base' }
+ *   '/api/premium': { amount: '0.01', asset: '0x...', network: 'bsc' }
  * }));
  */
 function x402Hono(payTo, routes, options = {}) {
@@ -278,8 +278,8 @@ function x402Hono(payTo, routes, options = {}) {
  * export const GET = x402Next(handler, {
  *   payTo: '0xYourAddress',
  *   amount: '0.01',
- *   asset: '0x833589...',
- *   network: 'base'
+ *   asset: '0x...',
+ *   network: 'bsc'
  * });
  *
  * @example Pages Router (legacy)
@@ -288,7 +288,7 @@ function x402Hono(payTo, routes, options = {}) {
  *   async (req, res) => {
  *     res.json({ data: 'premium content' });
  *   },
- *   { payTo: '0x...', amount: '0.01', asset: '0x...', network: 'base' }
+ *   { payTo: '0x...', amount: '0.01', asset: '0x...', network: 'bsc' }
  * );
  */
 function x402Next(handler, config, options = {}) {
