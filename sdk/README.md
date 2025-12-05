@@ -34,7 +34,7 @@ npm install @megalithlabs/x402 viem
 const { createSigner, x402Fetch } = require('@megalithlabs/x402');
 
 // Create signer with your wallet
-const signer = await createSigner('base', process.env.PRIVATE_KEY);
+const signer = await createSigner('bsc', process.env.PRIVATE_KEY);
 
 // Wrap fetch to auto-handle 402 responses
 const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
@@ -51,13 +51,13 @@ const data = await response.json();
 ```javascript
 const { createSigner, x402Fetch } = require('@megalithlabs/x402');
 const { createWalletClient, http } = require('viem');
-const { base } = require('viem/chains');
+const { bsc } = require('viem/chains');
 const { privateKeyToAccount } = require('viem/accounts');
 
 // Create viem wallet client (supports hardware wallets, WalletConnect, etc.)
 const walletClient = createWalletClient({
   account: privateKeyToAccount(process.env.PRIVATE_KEY),
-  chain: base,
+  chain: bsc,
   transport: http()
 });
 
@@ -77,15 +77,15 @@ const { x402Express } = require('@megalithlabs/x402');
 
 const app = express();
 
-// USDC on Base
-const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+// USDC on bsc
+const USDT = '0x55d398326f99059fF775485246999027B3197955';
 
 // Add payment requirement to routes
 app.use(x402Express('0xYourWalletAddress', {
   '/api/premium': {
-    amount: '0.01',      // 0.01 USDC (human-readable)
-    asset: USDC,         // Token address
-    network: 'base'      // Network
+    amount: '0.01',      // 0.01 USDT (human-readable)
+    asset: USDT,         // Token address
+    network: 'bsc'      // Network
   }
 }));
 
@@ -107,12 +107,12 @@ Create a signer for x402 payments. Supports two approaches:
 **Simple approach (private key):**
 
 ```javascript
-const signer = await createSigner('base', '0xabc123...');
+const signer = await createSigner('bsc', '0xabc123...');
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `network` | string | `'base'`, `'base-sepolia'`, `'bsc'`, `'bsc-testnet'` |
+| `network` | string |`'bsc'`, `'bsc-testnet'`, `'base'`, `'base-sepolia'`  |
 | `privateKey` | string | Wallet private key (hex string) |
 
 **Advanced approach (viem wallet client):**
@@ -121,27 +121,27 @@ const signer = await createSigner('base', '0xabc123...');
 
 ```javascript
 const { createWalletClient, http } = require('viem');
-const { base } = require('viem/chains');
+const { bsc } = require('viem/chains');
 const { privateKeyToAccount } = require('viem/accounts');
 
 // With private key
 const walletClient = createWalletClient({
   account: privateKeyToAccount('0xabc123...'),
-  chain: base,
+  chain: bsc,
   transport: http()
 });
 
 // With hardware wallet (Ledger)
 const walletClient = createWalletClient({
   account: await ledger.getAccount(),
-  chain: base,
+  chain: bsc,
   transport: http()
 });
 
 // With WalletConnect
 const walletClient = createWalletClient({
   account: walletConnectAccount,
-  chain: base,
+  chain: bsc,
   transport: http()
 });
 
@@ -196,11 +196,11 @@ Same options as `x402Fetch`.
 Express middleware to require payment for routes.
 
 ```javascript
-const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const USDC = '0x55d398326f99059fF775485246999027B3197955';
 
 app.use(x402Express('0xYourAddress', {
-  '/api/premium': { amount: '0.01', asset: USDC, network: 'base' },
-  '/api/expensive': { amount: '1.00', asset: USDC, network: 'base' }
+  '/api/premium': { amount: '0.01', asset: USDT, network: 'bsc' },
+  '/api/expensive': { amount: '1.00', asset: USDT, network: 'bsc' }
 }));
 ```
 
@@ -231,11 +231,11 @@ Hono middleware to require payment for routes.
 const { Hono } = require('hono');
 const { x402Hono } = require('@megalithlabs/x402');
 
-const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const USDT = '0x55d398326f99059fF775485246999027B3197955';
 const app = new Hono();
 
 app.use('*', x402Hono('0xYourAddress', {
-  '/api/premium': { amount: '0.01', asset: USDC, network: 'base' }
+  '/api/premium': { amount: '0.01', asset: USDT, network: 'bsc' }
 }));
 ```
 
@@ -251,7 +251,7 @@ Wrap Next.js API route handlers with payment requirement.
 // pages/api/premium.js
 const { x402Next } = require('@megalithlabs/x402');
 
-const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const USDT = '0x55d398326f99059fF775485246999027B3197955';
 
 export default x402Next(
   async (req, res) => {
@@ -260,8 +260,8 @@ export default x402Next(
   {
     payTo: '0xYourAddress',
     amount: '0.01',
-    asset: USDC,
-    network: 'base'
+    asset: USDT,
+    network: 'bsc'
   }
 );
 ```
@@ -272,10 +272,11 @@ export default x402Next(
 
 | Network | Chain ID | Description |
 |---------|----------|-------------|
-| `base` | 8453 | Base Mainnet |
-| `base-sepolia` | 84532 | Base Testnet |
 | `bsc` | 56 | BNB Chain Mainnet |
 | `bsc-testnet` | 97 | BNB Chain Testnet |
+| `base` | 8453 | Base Mainnet |
+| `base-sepolia` | 84532 | Base Testnet |
+
 
 ---
 
@@ -343,7 +344,7 @@ DEBUG=x402:* node app.js 2> debug.log
 ```
 x402:payer Request to https://api.example.com/premium +0ms
 x402:payer Got 402 Payment Required +125ms
-x402:payer Payment requirements: { scheme: 'exact', network: 'base', ... } +2ms
+x402:payer Payment requirements: { scheme: 'exact', network: 'bsc', ... } +2ms
 x402:payer Creating payment... +0ms
 x402:payer Payment created, signature: 0x1a2b3c... +340ms
 x402:payer Verifying payment with facilitator: https://x402.megalithlabs.ai +0ms
