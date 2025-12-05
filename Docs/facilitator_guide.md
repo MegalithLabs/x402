@@ -23,12 +23,12 @@ The facilitator acts as a trusted intermediary that:
 
 | Network | Chain ID | Name |
 |---------|----------|------|
-| `base` | 8453 | Base Mainnet |
-| `base-sepolia` | 84532 | Base Sepolia Testnet |
 | `bsc` | 56 | BNB Chain Mainnet |
 | `bsc-testnet` | 97 | BNB Chain Testnet |
+| `base` | 8453 | Base Mainnet |
+| `base-sepolia` | 84532 | Base Sepolia Testnet |
 
-Always use **text network names** (e.g., `"base"`, `"bsc"`), not numeric chain IDs.
+Always use **text network names** (e.g., `"bsc"`, `"bsc-testnet"`), not numeric chain IDs.
 
 ---
 
@@ -47,7 +47,7 @@ Verifies a payment signature without settling it on-chain.
   "paymentPayload": {
     "x402Version": 1,                         // Always 1
     "scheme": "exact",                        // Always "exact"
-    "network": "base",                        // Network name (see Supported Networks)
+    "network": "bsc",                         // Network name (see Supported Networks)
     "payload": {
       "signature": "0x...",                   // Your EIP-712 signature
       "authorization": {
@@ -62,7 +62,7 @@ Verifies a payment signature without settling it on-chain.
   },
   "paymentRequirements": {
     "scheme": "exact",                        // Must match payload
-    "network": "base",                        // Must match payload
+    "network": "bsc",                         // Must match payload
     "maxAmountRequired": "1000000",           // Maximum amount (must match or be less than value)
     "resource": "/api/premium",               // What's being paid for - URL, file, etc.
     "description": "Payment for data access", // Human-readable description
@@ -135,22 +135,22 @@ Lists supported scheme/network combinations.
 {
   "supportedNetworks": [
     {
-      "network": "base",
-      "schemes": ["exact"],
-      "autoDetect": true
-    },
-    {
-      "network": "base-sepolia",
-      "schemes": ["exact"],
-      "autoDetect": true
-    },
-    {
       "network": "bsc",
       "schemes": ["exact"],
       "autoDetect": true
     },
     {
       "network": "bsc-testnet",
+      "schemes": ["exact"],
+      "autoDetect": true
+    },
+    {
+      "network": "base",
+      "schemes": ["exact"],
+      "autoDetect": true
+    },
+    {
+      "network": "base-sepolia",
       "schemes": ["exact"],
       "autoDetect": true
     }
@@ -175,9 +175,9 @@ Health check and capability discovery.
   "spec": "https://x402.org",
   "supportedSchemes": ["exact"],
   "networks": {
-    "base": {
-      "name": "Base Mainnet",
-      "chainId": 8453,
+    "bsc": {
+      "name": "BNB Chain Mainnet",
+      "chainId": 56,
       "rpcConfigured": true,
       "keyConfigured": true,
       "facilitatorContract": "0x...",
@@ -185,9 +185,9 @@ Health check and capability discovery.
       "supportsExact": true,
       "supportsAutoDetection": true
     },
-    "base-sepolia": {
-      "name": "Base Sepolia",
-      "chainId": 84532,
+    "bsc-testnet": {
+      "name": "BNB Chain Testnet",
+      "chainId": 97,
       "rpcConfigured": true,
       "keyConfigured": true,
       "facilitatorContract": "0x...",
@@ -212,17 +212,17 @@ Returns Stargate contract addresses for each network.
 **Response:**
 ```json
 {
-  "base": {
+  "bsc": {
     "stargate": "0x...",
     "version": "1.0.0",
-    "network": "Base Mainnet",
-    "chainId": 8453
+    "network": "BNB Chain Mainnet",
+    "chainId": 56
   },
-  "base-sepolia": {
+  "bsc-testnet": {
     "stargate": "0x...",
     "version": "1.0.0",
-    "network": "Base Sepolia",
-    "chainId": 84532
+    "network": "BNB Chain Testnet",
+    "chainId": 97
   }
 }
 ```
@@ -245,7 +245,7 @@ Returns Stargate contract addresses for each network.
 |-------|------|-------------|
 | `x402Version` | number | Protocol version (always `1`) |
 | `scheme` | string | Payment scheme (always `"exact"`) |
-| `network` | string | Network name (`"base"`, `"base-sepolia"`, `"bsc"`, `"bsc-testnet"`) |
+| `network` | string | Network name (`"bsc"`, `"bsc-testnet"`, `"base"`, `"base-sepolia"`) |
 | `payload.signature` | string | Full EIP-712 signature as hex string |
 | `payload.authorization.from` | address | Payer address |
 | `payload.authorization.to` | address | Recipient address |
@@ -300,7 +300,7 @@ The facilitator supports two types of tokens with different requirements:
 {
   name: "USD Coin",           // Token's name
   version: "2",               // Token's version
-  chainId: 8453,              // Base mainnet (or your target chain)
+  chainId: 56,                // BNB Chain mainnet (or your target chain)
   verifyingContract: "0x..."  // Token address
 }
 ```
@@ -346,7 +346,7 @@ The facilitator supports two types of tokens with different requirements:
 {
   name: "Megalith",           // Stargate name
   version: "1",
-  chainId: 8453,              // Base mainnet (or your target chain)
+  chainId: 56,                // BNB Chain mainnet (or your target chain)
   verifyingContract: "0x..."  // Stargate address (from /contracts)
 }
 ```
@@ -505,13 +505,13 @@ await token.approve(stargateAddress, ethers.MaxUint256);
 const { ethers } = require('ethers');
 
 // 1. Connect to network
-const provider = new ethers.JsonRpcProvider('https://mainnet.base.org');
+const provider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org');
 const wallet = new ethers.Wallet(privateKey, provider);
 
 // 2. Get token and amount
-const tokenAddress = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
+const tokenAddress = '0x55d398326f99059fF775485246999027B3197955'; // USDT on BSC
 const token = new ethers.Contract(tokenAddress, abi, provider);
-const amount = ethers.parseUnits('1.0', 6); // 1 USDC
+const amount = ethers.parseUnits('1.0', 18); // 1 USDT
 
 // 3. Create authorization
 const now = Math.floor(Date.now() / 1000);
@@ -528,7 +528,7 @@ const authorization = {
 const domain = {
   name: await token.name(),
   version: await token.version(),
-  chainId: 8453, // Base mainnet
+  chainId: 56, // BNB Chain mainnet
   verifyingContract: tokenAddress
 };
 
@@ -551,7 +551,7 @@ const payload = {
   paymentPayload: {
     x402Version: 1,
     scheme: "exact",
-    network: "base",
+    network: "bsc",
     payload: {
       signature,
       authorization
@@ -559,7 +559,7 @@ const payload = {
   },
   paymentRequirements: {
     scheme: "exact",
-    network: "base",
+    network: "bsc",
     maxAmountRequired: amount.toString(),
     resource: "/api/data",
     description: "API access payment",
@@ -569,8 +569,8 @@ const payload = {
     maxTimeoutSeconds: 30,
     asset: tokenAddress,
     extra: {
-      name: "USD Coin",  // Token metadata
-      version: "2"
+      name: "Tether USD",  // Token metadata
+      version: "1"
     }
   }
 };
@@ -645,11 +645,11 @@ app.get('/api/premium-data', async (req, res) => {
 
 ### For Both
 
-1. **Use text network names** (`"base"`, `"bsc"`) not chain IDs (`8453`, `56`)
+1. **Use text network names** (`"bsc"`, `"bsc-testnet"`) not chain IDs (`56`, `97`)
 2. **Keep paymentRequirements consistent** with paymentPayload
 3. **Handle errors gracefully** with clear messages
 4. **Monitor /health endpoint** for facilitator status
-5. **Test on testnet first** (`base-sepolia`, `bsc-testnet`) before mainnet
+5. **Test on testnet first** (`bsc-testnet`) before mainnet
 
 ---
 

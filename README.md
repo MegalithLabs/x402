@@ -34,7 +34,7 @@ npm install @megalithlabs/x402
 const { createSigner, x402Fetch } = require('@megalithlabs/x402');
 
 // Create signer with your wallet
-const signer = await createSigner('base', process.env.PRIVATE_KEY);
+const signer = await createSigner('bsc', process.env.PRIVATE_KEY);
 
 // Wrap fetch to auto-handle 402 responses
 const fetchWithPay = x402Fetch(fetch, signer, { maxAmount: '0.50' });
@@ -50,14 +50,14 @@ const express = require('express');
 const { x402Express } = require('@megalithlabs/x402');
 
 const app = express();
-const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
+const USDT = '0x55d398326f99059fF775485246999027B3197955'; // USDT on BSC
 
 // Add payment requirement to routes
 app.use(x402Express('0xYourWalletAddress', {
   '/api/premium': {
-    amount: '0.01',      // 0.01 USDC
-    asset: USDC,
-    network: 'base'
+    amount: '0.01',      // 0.01 USDT
+    asset: USDT,
+    network: 'bsc'
   }
 }));
 
