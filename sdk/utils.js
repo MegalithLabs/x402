@@ -24,16 +24,6 @@ const FACILITATOR_TIMEOUT_MS = 10000;
 
 // Network configurations with env var overrides
 const NETWORKS = {
-  'base': {
-    name: 'Base Mainnet',
-    chainId: 8453,
-    rpcUrl: process.env.RPC_BASE || 'https://mainnet.base.org/'
-  },
-  'base-sepolia': {
-    name: 'Base Sepolia',
-    chainId: 84532,
-    rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
-  },
   'bsc': {
     name: 'BNB Chain Mainnet',
     chainId: 56,
@@ -43,7 +33,17 @@ const NETWORKS = {
     name: 'BNB Chain Testnet',
     chainId: 97,
     rpcUrl: process.env.RPC_BSC_TESTNET || 'https://data-seed-prebsc-1-s1.binance.org:8545/'
-  }
+  },
+  'base': {
+    name: 'Base Mainnet',
+    chainId: 8453,
+    rpcUrl: process.env.RPC_BASE || 'https://mainnet.base.org/'
+  },
+  'base-sepolia': {
+    name: 'Base Sepolia',
+    chainId: 84532,
+    rpcUrl: process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org/'
+  }  
 };
 
 // ============================================
