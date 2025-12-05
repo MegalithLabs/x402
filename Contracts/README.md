@@ -14,10 +14,10 @@ This directory contains the MegalithStargate smart contract
 
 | Network | Chain ID | Explorer |
 |---------|----------|----------|
-| Base Mainnet | 8453 | https://basescan.org |
-| Base Sepolia | 84532 | https://sepolia.basescan.org |
 | BNB Chain Mainnet | 56 | https://bscscan.com |
 | BNB Chain Testnet | 97 | https://testnet.bscscan.com |
+| Base Mainnet | 8453 | https://basescan.org |
+| Base Sepolia | 84532 | https://sepolia.basescan.org |
 
 ---
 

@@ -9,7 +9,7 @@ type WalletClient = any;
 // Networks
 // ============================================
 
-export type NetworkName = 'base' | 'base-sepolia' | 'bsc' | 'bsc-testnet';
+export type NetworkName = 'bsc' | 'bsc-testnet' | 'base' | 'base-sepolia';
 
 export interface NetworkConfig {
   name: string;
@@ -51,10 +51,10 @@ export interface CreateSignerOptions {
  * Create a signer for x402 payments
  *
  * @example Simple approach (private key)
- * const signer = await createSigner('base', '0xabc123...');
+ * const signer = await createSigner('bsc', '0xabc123...');
  *
  * @example With custom RPC
- * const signer = await createSigner('base', '0xabc123...', { rpcUrl: 'https://...' });
+ * const signer = await createSigner('bsc', '0xabc123...', { rpcUrl: 'https://...' });
  *
  * @example Advanced approach (viem wallet client)
  * const signer = await createSigner(walletClient);
@@ -161,7 +161,7 @@ export interface PayeeOptions {
  *
  * @example
  * app.use(x402Express('0xYourWallet', {
- *   '/api/premium': { amount: '0.001', asset: '0x...', network: 'base' }
+ *   '/api/premium': { amount: '0.001', asset: '0x...', network: 'bsc' }
  * }));
  */
 export function x402Express(
@@ -175,7 +175,7 @@ export function x402Express(
  *
  * @example
  * app.use('*', x402Hono('0xYourWallet', {
- *   '/api/premium': { amount: '0.001', asset: '0x...', network: 'base' }
+ *   '/api/premium': { amount: '0.001', asset: '0x...', network: 'bsc' }
  * }));
  */
 export function x402Hono(
@@ -190,12 +190,12 @@ export function x402Hono(
  *
  * @example App Router
  * export const GET = x402Next(handler, {
- *   payTo: '0xYourWallet', amount: '0.001', asset: '0x...', network: 'base'
+ *   payTo: '0xYourWallet', amount: '0.001', asset: '0x...', network: 'bsc'
  * });
  *
  * @example Pages Router
  * export default x402Next(handler, {
- *   payTo: '0xYourWallet', amount: '0.001', asset: '0x...', network: 'base'
+ *   payTo: '0xYourWallet', amount: '0.001', asset: '0x...', network: 'bsc'
  * });
  */
 export function x402Next(
