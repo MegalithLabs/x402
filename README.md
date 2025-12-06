@@ -1,6 +1,6 @@
 # Megalith x402
 
-**x402-compliant payment system** for EVM-compatible blockchains supporting both EIP-3009 and standard ERC-20 tokens.
+**x402-compliant payment system** for BNB Chain and EVM-compatible blockchains, supporting both EIP-3009 and standard ERC-20 tokens.
 
 **Part of the x402 protocol**: An open standard for internet-native payments using HTTP 402 status codes.
 
